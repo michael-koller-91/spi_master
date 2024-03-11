@@ -13,5 +13,8 @@ work.add_source_files(Path(__file__).parent / ".." / "*.vhd")
 vu.set_sim_option(
     "ghdl.gtkwave_script.gui", str(Path(__file__).parent / "waveform.tcl")
 )
+vu.set_sim_option(
+    "nvc.gtkwave_script.gui", str(Path(__file__).parent / "waveform.tcl")
+)
 
 vu.main()
