@@ -13,10 +13,10 @@ entity tb_spi_master is
     G_SCLK_IDLE_STATE                         : std_ulogic := '1';
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : boolean    := true;
     G_SCS_IDLE_STATE                          : std_ulogic := '1';
-    G_N_CLKS_SCS_TO_SCLK                      : positive    := 3;
-    G_N_CLKS_SCLK_TO_SCS                      : positive    := 4;
-    G_N_BITS                                  : positive    := 3;
-    G_CLK_DIVIDE                              : positive    := 4
+    G_N_CLKS_SCS_TO_SCLK                      : positive   := 3;
+    G_N_CLKS_SCLK_TO_SCS                      : positive   := 4;
+    G_N_BITS                                  : positive   := 3;
+    G_CLK_DIVIDE                              : positive   := 4
     );
 end entity;
 
@@ -71,6 +71,29 @@ architecture arch of tb_spi_master is
   signal scs                : std_ulogic                               := '0';
 
 begin
+
+  e_dut : entity work.spi_master(arch)
+    generic map(
+      G_SCLK_IDLE_STATE                         => G_SCLK_IDLE_STATE,
+      G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE => G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE,
+      G_SCS_IDLE_STATE                          => G_SCS_IDLE_STATE,
+      G_N_CLKS_SCS_TO_SCLK                      => G_N_CLKS_SCS_TO_SCLK,
+      G_N_CLKS_SCLK_TO_SCS                      => G_N_CLKS_SCLK_TO_SCS,
+      G_N_BITS                                  => G_N_BITS,
+      G_CLK_DIVIDE                              => G_CLK_DIVIDE
+      )
+    port map(
+      i_clk                => clk,
+      i_start              => start,
+      o_ready              => ready,
+      o_d_from_peripheral  => d_from_peripheral,
+      i_d_to_peripheral    => d_to_peripheral,
+      o_sclk               => sclk,
+      i_sd_from_peripheral => sd_from_peripheral,
+      o_sd_to_peripheral   => sd_to_peripheral,
+      o_scs                => scs
+      );
+
 
   CreateClock(clk, C_CLK_PERIOD);
 
@@ -148,27 +171,37 @@ begin
     check_equal((toc4 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + G_N_BITS * G_CLK_DIVIDE - G_CLK_DIVIDE / 2 + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct.");
   end process;
 
-  dut_i : entity work.spi_master(arch)
-    generic map(
-      G_SCLK_IDLE_STATE                         => G_SCLK_IDLE_STATE,
-      G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE => G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE,
-      G_SCS_IDLE_STATE                          => G_SCS_IDLE_STATE,
-      G_N_CLKS_SCS_TO_SCLK                      => G_N_CLKS_SCS_TO_SCLK,
-      G_N_CLKS_SCLK_TO_SCS                      => G_N_CLKS_SCLK_TO_SCS,
-      G_N_BITS                                  => G_N_BITS,
-      G_CLK_DIVIDE                              => G_CLK_DIVIDE
-      )
-    port map(
-      i_clk                => clk,
-      i_start              => start,
-      o_ready              => ready,
-      o_d_from_peripheral  => d_from_peripheral,
-      i_d_to_peripheral    => d_to_peripheral,
-      o_sclk               => sclk,
-      i_sd_from_peripheral => sd_from_peripheral,
-      o_sd_to_peripheral   => sd_to_peripheral,
-      o_scs                => scs
-      );
+  p_check_sample_strobe_sdi : process
+    alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
+  begin
+    if G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE then
+      wait_until_sclk_edge_away_from_idle(sclk);
+    else
+      wait_until_sclk_edge_toward_idle(sclk);
+    end if;
+
+    check_equal(sample_sdi, '1');
+    WaitForClock(clk, 1);
+    check_equal(sample_sdi, '1');
+    WaitForClock(clk, 1);
+    check_equal(sample_sdi, '0');
+  end process;
+
+  p_check_sample_strobe_sdo : process
+    alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
+  begin
+    if G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE then
+      wait_until_sclk_edge_toward_idle(sclk);
+    else
+      wait_until_sclk_edge_away_from_idle(sclk);
+    end if;
+
+    check_equal(sample_sdo, '1');
+    WaitForClock(clk, 1);
+    check_equal(sample_sdo, '1');
+    WaitForClock(clk, 1);
+    check_equal(sample_sdo, '0');
+  end process;
 
 end architecture;
 
