@@ -22,36 +22,36 @@ end entity;
 
 architecture arch of tb_spi_master is
 
-  procedure wait_until_scs_active(signal scs : std_ulogic) is
+  procedure wait_until_scs_active(signal scs : std_ulogic; signal scs_idle_state : std_ulogic) is
   begin
-    if G_SCS_IDLE_STATE = '0' then
+    if scs_idle_state = '0' then
       wait until rising_edge(scs);
     else
       wait until falling_edge(scs);
     end if;
   end procedure;
 
-  procedure wait_until_scs_inactive(signal scs : std_ulogic) is
+  procedure wait_until_scs_inactive(signal scs : std_ulogic; signal scs_idle_state : std_ulogic) is
   begin
-    if G_SCS_IDLE_STATE = '0' then
+    if scs_idle_state = '0' then
       wait until falling_edge(scs);
     else
       wait until rising_edge(scs);
     end if;
   end procedure;
 
-  procedure wait_until_sclk_edge_away_from_idle(signal sclk : std_ulogic) is
+  procedure wait_until_sclk_edge_away_from_idle(signal sclk : std_ulogic; signal sclk_idle_state : std_ulogic) is
   begin
-    if G_SCLK_IDLE_STATE = '0' then
+    if sclk_idle_state = '0' then
       wait until rising_edge(sclk);
     else
       wait until falling_edge(sclk);
     end if;
   end procedure;
 
-  procedure wait_until_sclk_edge_toward_idle(signal sclk : std_ulogic) is
+  procedure wait_until_sclk_edge_toward_idle(signal sclk : std_ulogic; signal sclk_idle_state : std_ulogic) is
   begin
-    if G_SCLK_IDLE_STATE = '0' then
+    if sclk_idle_state = '0' then
       wait until falling_edge(sclk);
     else
       wait until rising_edge(sclk);
@@ -70,13 +70,14 @@ architecture arch of tb_spi_master is
   signal sd_to_peripheral   : std_ulogic                               := '0';
   signal scs                : std_ulogic                               := '0';
 
+  signal sclk_idle_state : std_ulogic := G_SCLK_IDLE_STATE;
+  signal scs_idle_state  : std_ulogic := G_SCS_IDLE_STATE;
+
 begin
 
   e_dut : entity work.spi_master(arch)
     generic map(
-      G_SCLK_IDLE_STATE                         => G_SCLK_IDLE_STATE,
       G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE => G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE,
-      G_SCS_IDLE_STATE                          => G_SCS_IDLE_STATE,
       G_N_CLKS_SCS_TO_SCLK                      => G_N_CLKS_SCS_TO_SCLK,
       G_N_CLKS_SCLK_TO_SCS                      => G_N_CLKS_SCLK_TO_SCS,
       G_N_BITS                                  => G_N_BITS,
@@ -88,6 +89,10 @@ begin
       o_ready              => ready,
       o_d_from_peripheral  => d_from_peripheral,
       i_d_to_peripheral    => d_to_peripheral,
+      --
+      i_sclk_idle_state    => sclk_idle_state,
+      i_scs_idle_state     => scs_idle_state,
+      --
       o_sclk               => sclk,
       i_sd_from_peripheral => sd_from_peripheral,
       o_sd_to_peripheral   => sd_to_peripheral,
@@ -141,33 +146,37 @@ begin
   begin
     wait on start;
 
-    wait_until_scs_active(scs);
+    wait_until_scs_active(scs, scs_idle_state);
     tic1 := now;
 
-    wait_until_sclk_edge_away_from_idle(sclk);
+    wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
     toc1 := now;
+    info("Check timing SCS active and first SCLK edge");
     check_equal((toc1 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK, "The time difference between SCS active and the first SCLK edge is not correct.");
 
     tic2 := now;
 
     tic3 := now;
     for k in 1 to 2 * (G_N_BITS - 1) loop
-      info("k = " & to_string(k));
       wait on sclk;
       toc3 := now;
+      info("Check timing consecutive SCLK edges (k = " & to_string(k) & ").");
       check_equal((toc3 - tic3) / C_CLK_PERIOD, G_CLK_DIVIDE / 2, "The time difference between two consecutive SCLK edges is not correct.");
       tic3 := now;
     end loop;
 
-    wait_until_sclk_edge_toward_idle(sclk);
+    wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
     toc2 := now;
+    info("Check timing first and last SCLK edges.");
     check_equal((toc2 - tic2) / C_CLK_PERIOD, G_N_BITS * G_CLK_DIVIDE - G_CLK_DIVIDE / 2, "The time difference between the first and the last SCLK edges is not correct.");
     tic4 := now;
 
-    wait_until_scs_inactive(scs);
+    wait_until_scs_inactive(scs, scs_idle_state);
     toc4 := now;
-    check_equal((toc4 - tic4) / C_CLK_PERIOD, G_N_CLKS_SCLK_TO_SCS, "The time difference between the last sclk edge and SCS inactive is not correct.");
+    info("Check timing last SCLK edge and SCS inactive.");
+    check_equal((toc4 - tic4) / C_CLK_PERIOD, G_N_CLKS_SCLK_TO_SCS, "The time difference between the last SCLK edge and SCS inactive is not correct.");
 
+    info("Check timing SCS active.");
     check_equal((toc4 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + G_N_BITS * G_CLK_DIVIDE - G_CLK_DIVIDE / 2 + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct.");
   end process;
 
@@ -175,9 +184,9 @@ begin
     alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
   begin
     if G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE then
-      wait_until_sclk_edge_away_from_idle(sclk);
+      wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
     else
-      wait_until_sclk_edge_toward_idle(sclk);
+      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
     end if;
 
     check_equal(sample_sdi, '1');
@@ -191,9 +200,9 @@ begin
     alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
   begin
     if G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE then
-      wait_until_sclk_edge_toward_idle(sclk);
+      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
     else
-      wait_until_sclk_edge_away_from_idle(sclk);
+      wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
     end if;
 
     check_equal(sample_sdo, '1');

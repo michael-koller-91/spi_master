@@ -3,9 +3,7 @@ use ieee.std_logic_1164.all;
 
 entity spi_master is
   generic (
-    G_SCLK_IDLE_STATE                         : std_ulogic := '1';
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : boolean    := true;
-    G_SCS_IDLE_STATE                          : std_ulogic := '1';
     G_N_CLKS_SCS_TO_SCLK                      : positive   := 1;  -- natural?
     G_N_CLKS_SCLK_TO_SCS                      : positive   := 1;  -- natural?
     G_N_BITS                                  : positive   := 5;
@@ -17,11 +15,14 @@ entity spi_master is
     o_ready              : out std_ulogic                               := '0';
     o_d_from_peripheral  : out std_ulogic_vector(G_N_BITS - 1 downto 0) := (others => '0');
     i_d_to_peripheral    : in  std_ulogic_vector(G_N_BITS - 1 downto 0) := (others => '0');
-    --
-    o_sclk               : out std_ulogic                               := G_SCLK_IDLE_STATE;
+    -- setings
+    i_sclk_idle_state    :     std_ulogic                               := '1';
+    i_scs_idle_state     :     std_ulogic                               := '1';
+    -- SPI signals
+    o_sclk               : out std_ulogic                               := '1';
     i_sd_from_peripheral : in  std_ulogic                               := '0';
     o_sd_to_peripheral   : out std_ulogic                               := '0';
-    o_scs                : out std_ulogic                               := G_SCS_IDLE_STATE
+    o_scs                : out std_ulogic                               := '1'
     );
 end entity;
 
@@ -43,8 +44,8 @@ architecture arch of spi_master is
   signal counter_n_clks_scs_to_sclk : natural range 0 to C_N_CLKS_SCS_TO_SCLK := C_N_CLKS_SCS_TO_SCLK;
   signal counter_clk_divide         : natural range 0 to C_CLK_DIVIDE         := 0;
 
-  signal sclk : std_ulogic := G_SCLK_IDLE_STATE;
-  signal scs  : std_ulogic := G_SCS_IDLE_STATE;
+  signal sclk : std_ulogic := '1';
+  signal scs  : std_ulogic := '1';
 
   signal sclk_edge  : std_ulogic := '0';
   signal sample_sdi : std_ulogic := '0';
@@ -89,7 +90,7 @@ begin
         when wait_scs =>
           reset_sclk <= '1';
           if counter_n_clks_sclk_to_scs = 0 then
-            scs   <= G_SCS_IDLE_STATE;
+            scs   <= i_scs_idle_state;
             ready <= '1';
             state <= idle;
           else
@@ -100,7 +101,7 @@ begin
           ready <= '0';
           if i_start = '1' then
             counter_n_clks_scs_to_sclk <= C_N_CLKS_SCS_TO_SCLK;
-            scs                        <= not G_SCS_IDLE_STATE;
+            scs                        <= not i_scs_idle_state;
             state                      <= wait_sclk;
           end if;
       end case;
@@ -110,7 +111,7 @@ begin
   p_sample_strobes : process(all)
   begin
     if G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE then
-      if G_SCLK_IDLE_STATE = '1' then
+      if i_sclk_idle_state = '1' then
         sample_sdo <= sclk_edge and sclk;
         sample_sdi <= sclk_edge and not sclk;
       else
@@ -118,7 +119,7 @@ begin
         sample_sdi <= sclk_edge and sclk;
       end if;
     else
-      if G_SCLK_IDLE_STATE = '1' then
+      if i_sclk_idle_state = '1' then
         sample_sdo <= sclk_edge and not sclk;
         sample_sdi <= sclk_edge and sclk;
       else
@@ -133,7 +134,7 @@ begin
     if rising_edge(i_clk) then
       if reset_sclk = '1' then
         counter_clk_divide <= 0;
-        sclk               <= G_SCS_IDLE_STATE;
+        sclk               <= i_scs_idle_state;
         sclk_edge          <= '0';
       else
         sclk_edge <= '0';
@@ -145,9 +146,9 @@ begin
           counter_clk_divide <= counter_clk_divide - 1;
         end if;
 
-        --if counter_clk_divide = 1 then
-        --  sclk_edge <= '1';
-        --end if;
+      --if counter_clk_divide = 1 then
+      --  sclk_edge <= '1';
+      --end if;
       end if;
     end if;
   end process;
