@@ -57,6 +57,9 @@ architecture arch of spi_master is
   signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF := 2;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                := '1';
 
+  signal d_to_peripheral   : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal d_from_peripheral : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+
 begin
 
   p_sample_settings : process(i_clk)
@@ -65,6 +68,15 @@ begin
       if i_start = '1' then
         sclk_divide_half                        <= to_integer(i_sclk_divide_half);
         transmit_on_sclk_edge_toward_idle_state <= i_transmit_on_sclk_edge_toward_idle_state;
+      end if;
+    end if;
+  end process;
+
+  p_output_data_from_peripheral : process(i_clk)
+  begin
+    if rising_edge(i_clk) then
+      if ready = '1' then
+        o_d_from_peripheral <= d_from_peripheral;
       end if;
     end if;
   end process;
@@ -154,6 +166,30 @@ begin
           sclk_edge          <= '1';
         else
           counter_clk_divide <= counter_clk_divide - 1;
+        end if;
+      end if;
+    end if;
+  end process;
+
+  p_receive_from_peripheral : process(i_clk)
+  begin
+    if rising_edge(i_clk) then
+      if sample_sdi = '1' then
+        d_from_peripheral(0)                               <= i_sd_from_peripheral;
+        d_from_peripheral(d_from_peripheral'left downto 1) <= d_from_peripheral(d_from_peripheral'left - 1 downto 0);
+      end if;
+    end if;
+  end process;
+
+  p_transmit_to_peripheral : process(i_clk)
+  begin
+    if rising_edge(i_clk) then
+      if i_start = '1' then
+        d_to_peripheral <= i_d_to_peripheral;
+      else
+        if sample_sdo = '1' then
+          o_sd_to_peripheral                                 <= d_to_peripheral(0);
+          d_to_peripheral(d_to_peripheral'left - 1 downto 0) <= d_to_peripheral(d_to_peripheral'left downto 1);
         end if;
       end if;
     end if;
