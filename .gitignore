@@ -1,2 +1,3 @@
-.venv/
-vunit_out/
+.venv
+vunit_out
+waveform.tcl
