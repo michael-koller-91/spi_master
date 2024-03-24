@@ -17,7 +17,7 @@ entity tb_spi_master is
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
     G_N_CLKS_SCS_TO_SCLK                      : positive   := 3;
     G_N_CLKS_SCLK_TO_SCS                      : positive   := 4;
-    G_MAX_N_BITS_MINUS_1                      : positive   := 3;
+    G_MAX_N_BITS_MINUS_1                      : natural    := 3;
     G_MAX_SCLK_DIVIDE_HALF                    : positive   := 4
     );
 end entity;
@@ -73,7 +73,7 @@ architecture arch of tb_spi_master is
   signal scs                : std_ulogic                                       := '0';
 
   signal n_bits           : natural range 1 to G_MAX_N_BITS_MINUS_1 + 1;
-  signal i_n_bits_minus_1 : unsigned(positive(ceil(log2(real(G_MAX_N_BITS_MINUS_1)))) - 1 downto 0) := (others => '1');
+  signal i_n_bits_minus_1 : unsigned(positive(realmax(ceil(log2(real(G_MAX_N_BITS_MINUS_1 + 1))), 1.0)) - 1 downto 0) := (others => '1');
 
   signal i_sclk_divide_half                      : unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF + 1)))) - 1 downto 0) := (others => '1');
   signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF                                     := 2;
@@ -131,11 +131,13 @@ begin
     --
     WaitForClock(clk, 1);
     --
+    info("-- begin init");
     info("n_bits = " & to_string(n_bits));
     info("sclk_idle_state = " & to_string(sclk_idle_state));
     info("scs_idle_state = " & to_string(scs_idle_state));
     info("sclk_divide_half = " & to_string(sclk_divide_half));
     info("transmit_on_sclk_edge_toward_idle_state = " & to_string(transmit_on_sclk_edge_toward_idle_state));
+    info("-- end init");
 
     WaitForClock(clk, 10);
 
@@ -176,7 +178,21 @@ begin
 
           WaitForClock(clk, 5);
         end loop;
-      elsif run("04_transmit") then
+      elsif run("04_n_bits") then
+        for bits in 1 to G_MAX_N_BITS_MINUS_1 + 1 loop
+          n_bits <= bits;
+          WaitForClock(clk, 1);
+          info("n_bits = " & to_string(n_bits));
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          WaitForClock(clk, 1);
+          check_equal(ready, '0', result("for ready"));
+
+          wait until ready = '1';
+        end loop;
       end if;
     end loop;
 

@@ -7,27 +7,27 @@ entity spi_master is
   generic (
     G_N_CLKS_SCS_TO_SCLK   : positive := 1;  -- natural?
     G_N_CLKS_SCLK_TO_SCS   : positive := 1;  -- natural?
-    G_MAX_N_BITS_MINUS_1   : positive := 5;
+    G_MAX_N_BITS_MINUS_1   : natural  := 5;
     G_MAX_SCLK_DIVIDE_HALF : positive := 2
     );
   port (
-    i_clk                                     : in  std_ulogic                                                                    := '0';
-    i_start                                   : in  std_ulogic                                                                    := '0';
-    o_ready                                   : out std_ulogic                                                                    := '0';
+    i_clk                                     : in  std_ulogic                                                                                := '0';
+    i_start                                   : in  std_ulogic                                                                                := '0';
+    o_ready                                   : out std_ulogic                                                                                := '0';
     -- data
-    i_d_to_peripheral                         : in  std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0)                              := (others => '0');
-    o_d_from_peripheral                       : out std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0)                              := (others => '0');
+    i_d_to_peripheral                         : in  std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0)                                          := (others => '0');
+    o_d_from_peripheral                       : out std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0)                                          := (others => '0');
     -- setings
-    i_n_bits_minus_1                          : in  unsigned(positive(ceil(log2(real(G_MAX_N_BITS_MINUS_1)))) - 1 downto 0)       := (others => '1');
-    i_sclk_idle_state                         : in  std_ulogic                                                                    := '1';
-    i_sclk_divide_half                        : in  unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF + 1)))) - 1 downto 0) := (others => '1');
-    i_scs_idle_state                          : in  std_ulogic                                                                    := '1';
-    i_transmit_on_sclk_edge_toward_idle_state : in  std_ulogic                                                                    := '1';
+    i_n_bits_minus_1                          : in  unsigned(positive(realmax(ceil(log2(real(G_MAX_N_BITS_MINUS_1 + 1))), 1.0)) - 1 downto 0) := (others => '1');
+    i_sclk_idle_state                         : in  std_ulogic                                                                                := '1';
+    i_sclk_divide_half                        : in  unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF + 1)))) - 1 downto 0)             := (others => '1');
+    i_scs_idle_state                          : in  std_ulogic                                                                                := '1';
+    i_transmit_on_sclk_edge_toward_idle_state : in  std_ulogic                                                                                := '1';
     -- SPI signals
-    o_sclk                                    : out std_ulogic                                                                    := '1';
-    i_sd_from_peripheral                      : in  std_ulogic                                                                    := '0';
-    o_sd_to_peripheral                        : out std_ulogic                                                                    := '0';
-    o_scs                                     : out std_ulogic                                                                    := '1'
+    o_sclk                                    : out std_ulogic                                                                                := '1';
+    i_sd_from_peripheral                      : in  std_ulogic                                                                                := '0';
+    o_sd_to_peripheral                        : out std_ulogic                                                                                := '0';
+    o_scs                                     : out std_ulogic                                                                                := '1'
     );
 end entity;
 
@@ -36,7 +36,6 @@ architecture arch of spi_master is
   constant C_N_CLKS_SCLK_TO_SCS : natural := G_N_CLKS_SCLK_TO_SCS;
   constant C_N_CLKS_SCS_TO_SCLK : natural := G_N_CLKS_SCS_TO_SCLK - 1;
 
-  signal counter_n_bits             : natural range 0 to G_MAX_N_BITS_MINUS_1               := G_MAX_N_BITS_MINUS_1;
   signal counter_n_sclk_edges       : natural range 0 to 2 * (G_MAX_N_BITS_MINUS_1 + 1) - 1 := 2 * (G_MAX_N_BITS_MINUS_1 + 1) - 1;
   signal counter_n_clks_sclk_to_scs : natural range 0 to C_N_CLKS_SCLK_TO_SCS               := C_N_CLKS_SCLK_TO_SCS;
   signal counter_n_clks_scs_to_sclk : natural range 0 to C_N_CLKS_SCS_TO_SCLK               := C_N_CLKS_SCS_TO_SCLK;
@@ -108,10 +107,9 @@ begin
 
         when others =>                  -- idle
           ready <= '0';
-          scs   <= i_scs_idle_state;  -- make in-port change visible at out-port without the need of a start signal
+          scs   <= i_scs_idle_state;  -- make in-port change visible at out-port without the need of a start strobe
           if i_start = '1' then
-            counter_n_sclk_edges       <= 2 * (G_MAX_N_BITS_MINUS_1 + 1) - 1;
-            counter_n_bits             <= to_integer(i_n_bits_minus_1);
+            counter_n_sclk_edges       <= to_integer(i_n_bits_minus_1 & '0') + 1;
             counter_n_clks_scs_to_sclk <= C_N_CLKS_SCS_TO_SCLK;
             scs                        <= not i_scs_idle_state;
             state                      <= wait_sclk;

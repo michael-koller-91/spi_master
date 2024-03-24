@@ -86,6 +86,17 @@ for divide in [2, 5, 10]:
         },
     )
 
+test = tb.test("04_n_bits")
+counter = 0
+for n_bits_minus_1 in [0, 1, 2]:
+    counter += 1
+    test.add_config(
+        name=f"c{counter}.max_n_bits_minus_1={n_bits_minus_1}",
+        generics={
+            "G_MAX_N_BITS_MINUS_1": n_bits_minus_1,
+        },
+    )
+
 waveform_filename = "waveform.tcl"
 generate_waveform_file(waveform_filename)
 
