@@ -72,11 +72,11 @@ architecture arch of tb_spi_master is
   signal sd_to_peripheral   : std_ulogic                               := '0';
   signal scs                : std_ulogic                               := '0';
 
-  signal i_sclk_divide_half                      : unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF+1)))) - 1 downto 0) := (others => '1');
-  signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF                                   := 2;
-  signal sclk_idle_state                         : std_ulogic                                                                  := G_SCLK_IDLE_STATE;
-  signal scs_idle_state                          : std_ulogic                                                                  := G_SCS_IDLE_STATE;
-  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                                  := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
+  signal i_sclk_divide_half                      : unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF + 1)))) - 1 downto 0) := (others => '1');
+  signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF                                     := 2;
+  signal sclk_idle_state                         : std_ulogic                                                                    := G_SCLK_IDLE_STATE;
+  signal scs_idle_state                          : std_ulogic                                                                    := G_SCS_IDLE_STATE;
+  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                                    := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
 begin
 
@@ -118,6 +118,9 @@ begin
 
     while test_suite loop
       if run("SCS_SCLK_timings") then
+        sclk_idle_state <= G_SCLK_IDLE_STATE;
+        info("sclk_idle_state = " & to_string(sclk_idle_state));
+
         for divide_half in 2 to G_MAX_SCLK_DIVIDE_HALF loop
           sclk_divide_half <= divide_half;
           WaitForClock(clk, 1);
@@ -148,6 +151,10 @@ begin
 
   test_runner_watchdog(runner, 2 us);
 
+  ---------------------------------------------------------------------------
+  -- check SCLK and SCS timing
+  ---------------------------------------------------------------------------
+
   p_check_time_sclk_and_scs : process
     variable tic1 : time := 0 ns;
     variable tic2 : time := 0 ns;
@@ -158,7 +165,7 @@ begin
     variable toc3 : time := 0 ns;
     variable toc4 : time := 0 ns;
   begin
-    wait on start;
+    wait until start = '1';
 
     wait_until_scs_active(scs, scs_idle_state);
     tic1 := now;
@@ -194,9 +201,15 @@ begin
     check_equal((toc4 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + G_N_BITS * 2 * sclk_divide_half - sclk_divide_half + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct.");
   end process;
 
-  p_check_sample_strobe_sdi : process
+  ---------------------------------------------------------------------------
+  -- check sample strobes
+  ---------------------------------------------------------------------------
+
+  p_check_sample_strobe_sdi_happens : process
     alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
   begin
+    wait until start = '1';
+
     if transmit_on_sclk_edge_toward_idle_state then
       wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
     else
@@ -210,20 +223,51 @@ begin
     check_equal(sample_sdi, '0', result("for sample_sdi"));
   end process;
 
-  p_check_sample_strobe_sdo : process
+  p_check_sample_strobe_sdo_happens : process
     alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
   begin
+    wait;
+    wait until start = '1';
+
     if transmit_on_sclk_edge_toward_idle_state then
       wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
     else
       wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
     end if;
 
-  --check_equal(sample_sdo, '1', result("for sample_sdo"));
-  --WaitForClock(clk, 1);
-  --check_equal(sample_sdo, '1', result("for sample_sdo"));
-  --WaitForClock(clk, 1);
-  --check_equal(sample_sdo, '0', result("for sample_sdo"));
+    check_equal(sample_sdo, '1', result("for sample_sdo"));
+    WaitForClock(clk, 1);
+    check_equal(sample_sdo, '1', result("for sample_sdo"));
+    WaitForClock(clk, 1);
+    check_equal(sample_sdo, '0', result("for sample_sdo"));
+  end process;
+
+  p_check_sample_strobe_sdi_count : process
+    alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
+    variable count                                 : integer := 0;
+  begin
+    wait until start = '1';
+
+    count := 0;
+    while not ready = '1' loop
+      wait until rising_edge(sample_sdi);
+      count := count + 1;
+    end loop;
+    check_equal(count, G_N_BITS, result("for sample_sdi count"));
+  end process;
+
+  p_check_sample_strobe_sdo_count : process
+    alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
+    variable count                                 : integer := 0;
+  begin
+    wait until start = '1';
+
+    count := 0;
+    while not ready = '1' loop
+      wait until rising_edge(sample_sdo);
+      count := count + 1;
+    end loop;
+    check_equal(count, G_N_BITS, result("for sample_sdo count"));
   end process;
 
 end architecture;

@@ -11,21 +11,21 @@ entity spi_master is
     G_MAX_SCLK_DIVIDE_HALF : positive := 2
     );
   port (
-    i_clk                                     : in  std_ulogic                                                                := '0';
-    i_start                                   : in  std_ulogic                                                                := '0';
-    o_ready                                   : out std_ulogic                                                                := '0';
-    o_d_from_peripheral                       : out std_ulogic_vector(G_N_BITS - 1 downto 0)                                  := (others => '0');
-    i_d_to_peripheral                         : in  std_ulogic_vector(G_N_BITS - 1 downto 0)                                  := (others => '0');
+    i_clk                                     : in  std_ulogic                                                                  := '0';
+    i_start                                   : in  std_ulogic                                                                  := '0';
+    o_ready                                   : out std_ulogic                                                                  := '0';
+    o_d_from_peripheral                       : out std_ulogic_vector(G_N_BITS - 1 downto 0)                                    := (others => '0');
+    i_d_to_peripheral                         : in  std_ulogic_vector(G_N_BITS - 1 downto 0)                                    := (others => '0');
     -- setings
-    i_sclk_idle_state                         : in  std_ulogic                                                                := '1';
+    i_sclk_idle_state                         : in  std_ulogic                                                                  := '1';
     i_sclk_divide_half                        : in  unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF+1)))) - 1 downto 0) := (others => '1');
-    i_scs_idle_state                          : in  std_ulogic                                                                := '1';
-    i_transmit_on_sclk_edge_toward_idle_state : in  std_ulogic                                                                := '1';
+    i_scs_idle_state                          : in  std_ulogic                                                                  := '1';
+    i_transmit_on_sclk_edge_toward_idle_state : in  std_ulogic                                                                  := '1';
     -- SPI signals
-    o_sclk                                    : out std_ulogic                                                                := '1';
-    i_sd_from_peripheral                      : in  std_ulogic                                                                := '0';
-    o_sd_to_peripheral                        : out std_ulogic                                                                := '0';
-    o_scs                                     : out std_ulogic                                                                := '1'
+    o_sclk                                    : out std_ulogic                                                                  := '1';
+    i_sd_from_peripheral                      : in  std_ulogic                                                                  := '0';
+    o_sd_to_peripheral                        : out std_ulogic                                                                  := '0';
+    o_scs                                     : out std_ulogic                                                                  := '1'
     );
 end entity;
 
@@ -55,8 +55,6 @@ architecture arch of spi_master is
   signal reset_sclk : std_ulogic := '1';
 
   signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF := 2;
-  signal sclk_idle_state                         : std_ulogic                                := '1';
-  signal scs_idle_state                          : std_ulogic                                := '1';
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                := '1';
 
 begin
@@ -66,8 +64,6 @@ begin
     if rising_edge(i_clk) then
       if i_start = '1' then
         sclk_divide_half                        <= to_integer(i_sclk_divide_half);
-        sclk_idle_state                         <= i_sclk_idle_state;
-        scs_idle_state                          <= i_scs_idle_state;
         transmit_on_sclk_edge_toward_idle_state <= i_transmit_on_sclk_edge_toward_idle_state;
       end if;
     end if;
@@ -124,8 +120,8 @@ begin
 
   p_sample_strobes : process(all)
   begin
-    if transmit_on_sclk_edge_toward_idle_state then
-      if sclk_idle_state = '1' then
+    if transmit_on_sclk_edge_toward_idle_state = '1' then
+      if i_sclk_idle_state = '1' then
         sample_sdo <= sclk_edge and sclk;
         sample_sdi <= sclk_edge and not sclk;
       else
@@ -133,7 +129,7 @@ begin
         sample_sdi <= sclk_edge and sclk;
       end if;
     else
-      if sclk_idle_state = '1' then
+      if i_sclk_idle_state = '1' then
         sample_sdo <= sclk_edge and not sclk;
         sample_sdi <= sclk_edge and sclk;
       else
@@ -148,7 +144,7 @@ begin
     if rising_edge(i_clk) then
       if reset_sclk = '1' then
         counter_clk_divide <= 1;
-        sclk               <= i_scs_idle_state;
+        sclk               <= i_sclk_idle_state;
         sclk_edge          <= '0';
       else
         sclk_edge <= '0';
@@ -159,10 +155,6 @@ begin
         else
           counter_clk_divide <= counter_clk_divide - 1;
         end if;
-
-      --if counter_clk_divide = 1 then
-      --  sclk_edge <= '1';
-      --end if;
       end if;
     end if;
   end process;
