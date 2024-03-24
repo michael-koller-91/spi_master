@@ -49,7 +49,7 @@ work.add_source_files(Path(__file__).parent.parent / "*.vhd")
 
 tb = work.test_bench("tb_spi_master")
 
-test = tb.test("01_SCS_SCLK_timings")
+test = tb.test("01_all_sclk_scs_idle_cases")
 counter = 0
 for sclk_idle_state in ["'0'", "'1'"]:
     for scs_idle_state in ["'0'", "'1'"]:
@@ -62,7 +62,7 @@ for sclk_idle_state in ["'0'", "'1'"]:
             },
         )
 
-test = tb.test("02_transmit_edge")
+test = tb.test("02_all_sclk_transmit_edge_cases")
 counter = 0
 for sclk_idle_state in ["'0'", "'1'"]:
     for transmit_edge in ["'0'", "'1'"]:
@@ -74,6 +74,17 @@ for sclk_idle_state in ["'0'", "'1'"]:
                 "G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE": transmit_edge,
             },
         )
+
+test = tb.test("03_sclk_divide")
+counter = 0
+for divide in [2, 5, 10]:
+    counter += 1
+    test.add_config(
+        name=f"c{counter}.max_sclk_divide={divide}",
+        generics={
+            "G_MAX_SCLK_DIVIDE_HALF": divide,
+        },
+    )
 
 waveform_filename = "waveform.tcl"
 generate_waveform_file(waveform_filename)

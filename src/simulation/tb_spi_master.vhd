@@ -17,7 +17,7 @@ entity tb_spi_master is
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
     G_N_CLKS_SCS_TO_SCLK                      : positive   := 3;
     G_N_CLKS_SCLK_TO_SCS                      : positive   := 4;
-    G_N_BITS                                  : positive   := 3;
+    G_MAX_N_BITS_MINUS_1                      : positive   := 3;
     G_MAX_SCLK_DIVIDE_HALF                    : positive   := 4
     );
 end entity;
@@ -62,15 +62,18 @@ architecture arch of tb_spi_master is
 
   constant C_CLK_PERIOD : time := 10 ns;
 
-  signal clk                : std_ulogic                               := '0';
-  signal d_from_peripheral  : std_ulogic_vector(G_N_BITS - 1 downto 0) := (others => '0');
-  signal d_to_peripheral    : std_ulogic_vector(G_N_BITS - 1 downto 0) := (others => '0');
-  signal start              : std_ulogic                               := '0';
-  signal ready              : std_ulogic                               := '0';
-  signal sclk               : std_ulogic                               := '0';
-  signal sd_from_peripheral : std_ulogic                               := '0';
-  signal sd_to_peripheral   : std_ulogic                               := '0';
-  signal scs                : std_ulogic                               := '0';
+  signal clk                : std_ulogic                                       := '0';
+  signal d_from_peripheral  : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal d_to_peripheral    : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal start              : std_ulogic                                       := '0';
+  signal ready              : std_ulogic                                       := '0';
+  signal sclk               : std_ulogic                                       := '0';
+  signal sd_from_peripheral : std_ulogic                                       := '0';
+  signal sd_to_peripheral   : std_ulogic                                       := '0';
+  signal scs                : std_ulogic                                       := '0';
+
+  signal n_bits           : natural range 1 to G_MAX_N_BITS_MINUS_1 + 1;
+  signal i_n_bits_minus_1 : unsigned(positive(ceil(log2(real(G_MAX_N_BITS_MINUS_1)))) - 1 downto 0) := (others => '1');
 
   signal i_sclk_divide_half                      : unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF + 1)))) - 1 downto 0) := (others => '1');
   signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF                                     := 2;
@@ -80,13 +83,14 @@ architecture arch of tb_spi_master is
 
 begin
 
+  i_n_bits_minus_1   <= to_unsigned(n_bits - 1, i_n_bits_minus_1'length);
   i_sclk_divide_half <= to_unsigned(sclk_divide_half, i_sclk_divide_half'length);
 
   e_dut : entity work.spi_master(arch)
     generic map(
       G_N_CLKS_SCS_TO_SCLK   => G_N_CLKS_SCS_TO_SCLK,
       G_N_CLKS_SCLK_TO_SCS   => G_N_CLKS_SCLK_TO_SCS,
-      G_N_BITS               => G_N_BITS,
+      G_MAX_N_BITS_MINUS_1   => G_MAX_N_BITS_MINUS_1,
       G_MAX_SCLK_DIVIDE_HALF => G_MAX_SCLK_DIVIDE_HALF
       )
     port map(
@@ -96,6 +100,7 @@ begin
       o_d_from_peripheral                       => d_from_peripheral,
       i_d_to_peripheral                         => d_to_peripheral,
       --
+      i_n_bits_minus_1                          => i_n_bits_minus_1,
       i_sclk_idle_state                         => sclk_idle_state,
       i_sclk_divide_half                        => i_sclk_divide_half,
       i_scs_idle_state                          => scs_idle_state,
@@ -114,16 +119,47 @@ begin
   begin
     test_runner_setup(runner, runner_cfg);
 
+    --
+    -- by default, use the testbench generics
+    --
+    n_bits                                  <= G_MAX_N_BITS_MINUS_1 + 1;
+    sclk_idle_state                         <= G_SCLK_IDLE_STATE;
+    scs_idle_state                          <= G_SCS_IDLE_STATE;
+    sclk_divide_half                        <= G_MAX_SCLK_DIVIDE_HALF;
+    sclk_divide_half                        <= G_MAX_SCLK_DIVIDE_HALF;
+    transmit_on_sclk_edge_toward_idle_state <= G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
+    --
+    WaitForClock(clk, 1);
+    --
+    info("n_bits = " & to_string(n_bits));
+    info("sclk_idle_state = " & to_string(sclk_idle_state));
+    info("scs_idle_state = " & to_string(scs_idle_state));
+    info("sclk_divide_half = " & to_string(sclk_divide_half));
+    info("transmit_on_sclk_edge_toward_idle_state = " & to_string(transmit_on_sclk_edge_toward_idle_state));
+
     WaitForClock(clk, 10);
 
     while test_suite loop
-      if run("01_SCS_SCLK_timings") then
-        sclk_idle_state <= G_SCLK_IDLE_STATE;
-        info("sclk_idle_state = " & to_string(sclk_idle_state));
+      if run("01_all_sclk_scs_idle_cases") then
+        start <= '1';
+        WaitForClock(clk, 1);
+        start <= '0';
 
-        scs_idle_state <= G_SCS_IDLE_STATE;
-        info("scs_idle_state = " & to_string(scs_idle_state));
+        WaitForClock(clk, 1);
+        check_equal(ready, '0', result("for ready"));
+        wait until rising_edge(ready);
+        WaitForClock(clk, 2);
+        check_equal(ready, '0', result("for ready"));
+      elsif run("02_all_sclk_transmit_edge_cases") then
+        start <= '1';
+        WaitForClock(clk, 1);
+        start <= '0';
 
+        WaitForClock(clk, 1);
+        check_equal(ready, '0', result("for ready"));
+
+        wait until ready = '1';
+      elsif run("03_sclk_divide") then
         for divide_half in 2 to G_MAX_SCLK_DIVIDE_HALF loop
           sclk_divide_half <= divide_half;
           WaitForClock(clk, 1);
@@ -136,43 +172,21 @@ begin
           WaitForClock(clk, 1);
           check_equal(ready, '0', result("for ready"));
 
-          wait until rising_edge(ready);
-          WaitForClock(clk, 2);
-          check_equal(ready, '0', result("for ready"));
+          wait until ready = '1';
 
           WaitForClock(clk, 5);
         end loop;
-      elsif run("02_transmit_edge") then
-        transmit_on_sclk_edge_toward_idle_state <= G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
-        info("transmit_on_sclk_edge_toward_idle_state = " & to_string(transmit_on_sclk_edge_toward_idle_state));
-
-        sclk_divide_half <= 2;
-        info("sclk_divide_half = " & to_string(sclk_divide_half));
-
-        start <= '1';
-        WaitForClock(clk, 1);
-        start <= '0';
-
-        WaitForClock(clk, 1);
-        check_equal(ready, '0', result("for ready"));
-
-        wait until ready = '1';
-        WaitForClock(clk, 2);
+      elsif run("04_transmit") then
       end if;
-      --elsif run("SCLK_divide") then
-      --  for divide_half in 2 to G_MAX_SCLK_DIVIDE_HALF loop
-
-    --  end loop;
     end loop;
 
     WaitForClock(clk, 10);
 
     test_runner_cleanup(runner);
     wait;
-
   end process;
 
-  test_runner_watchdog(runner, 2 us);
+  test_runner_watchdog(runner, 10 us);
 
   ---------------------------------------------------------------------------
   -- check SCLK and SCS timing
@@ -201,7 +215,7 @@ begin
     tic2 := now;
 
     tic3 := now;
-    for k in 1 to 2 * (G_N_BITS - 1) loop
+    for k in 1 to 2 * (n_bits - 1) loop
       wait on sclk;
       toc3 := now;
       info("Check timing consecutive SCLK edges (k = " & to_string(k) & ").");
@@ -212,7 +226,7 @@ begin
     wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
     toc2 := now;
     info("Check timing first and last SCLK edges.");
-    check_equal((toc2 - tic2) / C_CLK_PERIOD, G_N_BITS * 2 * sclk_divide_half - sclk_divide_half, "The time difference between the first and the last SCLK edges is not correct.");
+    check_equal((toc2 - tic2) / C_CLK_PERIOD, n_bits * 2 * sclk_divide_half - sclk_divide_half, "The time difference between the first and the last SCLK edges is not correct.");
     tic4 := now;
 
     wait_until_scs_inactive(scs, scs_idle_state);
@@ -221,7 +235,7 @@ begin
     check_equal((toc4 - tic4) / C_CLK_PERIOD, G_N_CLKS_SCLK_TO_SCS, "The time difference between the last SCLK edge and SCS inactive is not correct.");
 
     info("Check timing SCS active.");
-    check_equal((toc4 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + G_N_BITS * 2 * sclk_divide_half - sclk_divide_half + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct.");
+    check_equal((toc4 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + n_bits * 2 * sclk_divide_half - sclk_divide_half + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct.");
   end process;
 
   ---------------------------------------------------------------------------
@@ -301,7 +315,7 @@ begin
       wait until rising_edge(sample_sdi);
       count := count + 1;
     end loop;
-    check_equal(count, G_N_BITS, result("for sample_sdi count"));
+    check_equal(count, n_bits, result("for sample_sdi count"));
   end process;
 
   p_check_sample_strobe_sdo_count : process
@@ -315,7 +329,7 @@ begin
       wait until rising_edge(sample_sdo);
       count := count + 1;
     end loop;
-    check_equal(count, G_N_BITS, result("for sample_sdo count"));
+    check_equal(count, n_bits, result("for sample_sdo count"));
   end process;
 
   p_check_sample_strobe_edge : process
