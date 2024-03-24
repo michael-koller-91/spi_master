@@ -107,6 +107,7 @@ begin
 
         when others =>                  -- idle
           ready <= '0';
+          scs   <= i_scs_idle_state; -- make in-port change visible at out-port without the need of a start signal
           if i_start = '1' then
             counter_n_sclk_edges       <= 2 * G_N_BITS-1;
             counter_n_bits             <= C_N_BITS;

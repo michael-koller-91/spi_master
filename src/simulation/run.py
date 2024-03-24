@@ -25,13 +25,14 @@ def parse_signal_names(filename, p):
 def generate_waveform_file(filename):
     p_port = re.compile(r".*\s:\s[in|out].*;")
     p_signal = re.compile(r"\bsignal.*:.*;")
+
     lines = ["set signals [list]\n"]
     for signal in parse_signal_names("tb_spi_master.vhd", p_signal):
-       lines.append(f'lappend signals "{signal}"\n')
+        lines.append(f'lappend signals "{signal}"\n')
     for port in parse_port_names(os.path.join("..", "spi_master.vhd"), p_port):
-       lines.append(f'lappend signals "e_dut.{port}"\n')
+        lines.append(f'lappend signals "e_dut.{port}"\n')
     for signal in parse_signal_names(os.path.join("..", "spi_master.vhd"), p_signal):
-       lines.append(f'lappend signals "e_dut.{signal}"\n')
+        lines.append(f'lappend signals "e_dut.{signal}"\n')
     lines.append("gtkwave::addSignalsFromList $signals\n")
 
     with open(filename, "w") as f:
@@ -48,8 +49,17 @@ work.add_source_files(Path(__file__).parent.parent / "*.vhd")
 
 tb = work.test_bench("tb_spi_master")
 test001 = tb.test("SCS_SCLK_timings")
+counter = 0
 for sclk_idle_state in ["'0'", "'1'"]:
-    test001.add_config(name=f"sclk_idle_state={sclk_idle_state}", generics={"G_SCLK_IDLE_STATE": sclk_idle_state})
+    for scs_idle_state in ["'0'", "'1'"]:
+        counter += 1
+        test001.add_config(
+            name=f"c{counter}.sclk_idle_state={sclk_idle_state}.scs_idle_state={scs_idle_state}",
+            generics={
+                "G_SCLK_IDLE_STATE": sclk_idle_state,
+                "G_SCS_IDLE_STATE": scs_idle_state,
+            },
+        )
 
 waveform_filename = "waveform.tcl"
 generate_waveform_file(waveform_filename)

@@ -13,8 +13,8 @@ entity tb_spi_master is
   generic (
     runner_cfg                                : string;
     G_SCLK_IDLE_STATE                         : std_ulogic := '1';
-    G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
     G_SCS_IDLE_STATE                          : std_ulogic := '1';
+    G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
     G_N_CLKS_SCS_TO_SCLK                      : positive   := 3;
     G_N_CLKS_SCLK_TO_SCS                      : positive   := 4;
     G_N_BITS                                  : positive   := 3;
@@ -121,6 +121,9 @@ begin
         sclk_idle_state <= G_SCLK_IDLE_STATE;
         info("sclk_idle_state = " & to_string(sclk_idle_state));
 
+        scs_idle_state <= G_SCS_IDLE_STATE;
+        info("scs_idle_state = " & to_string(scs_idle_state));
+
         for divide_half in 2 to G_MAX_SCLK_DIVIDE_HALF loop
           sclk_divide_half <= divide_half;
           WaitForClock(clk, 1);
@@ -202,6 +205,31 @@ begin
   end process;
 
   ---------------------------------------------------------------------------
+  -- check SCLK and SCS idle state
+  ---------------------------------------------------------------------------
+  p_check_sclk_idle_state : process
+  begin
+    wait until start = '1';
+    check_equal(sclk, sclk_idle_state, result("for sclk"));
+
+    wait until sclk = not sclk_idle_state;
+
+    wait until ready = '1';
+    check_equal(sclk, sclk_idle_state, result("for sclk"));
+  end process;
+
+  p_check_scs_idle_state : process
+  begin
+    wait until start = '1';
+    check_equal(scs, scs_idle_state, result("for sclk"));
+
+    wait until scs = not scs_idle_state;
+
+    wait until ready = '1';
+    check_equal(scs, scs_idle_state, result("for scs"));
+  end process;
+
+  ---------------------------------------------------------------------------
   -- check sample strobes
   ---------------------------------------------------------------------------
 
@@ -226,7 +254,6 @@ begin
   p_check_sample_strobe_sdo_happens : process
     alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
   begin
-    wait;
     wait until start = '1';
 
     if transmit_on_sclk_edge_toward_idle_state then
