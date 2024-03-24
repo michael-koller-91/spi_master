@@ -48,16 +48,30 @@ work.add_source_files(Path(__file__).parent / "*.vhd")
 work.add_source_files(Path(__file__).parent.parent / "*.vhd")
 
 tb = work.test_bench("tb_spi_master")
-test001 = tb.test("SCS_SCLK_timings")
+
+test = tb.test("01_SCS_SCLK_timings")
 counter = 0
 for sclk_idle_state in ["'0'", "'1'"]:
     for scs_idle_state in ["'0'", "'1'"]:
         counter += 1
-        test001.add_config(
-            name=f"c{counter}.sclk_idle_state={sclk_idle_state}.scs_idle_state={scs_idle_state}",
+        test.add_config(
+            name=f"c{counter}.sclk_idle={sclk_idle_state}.scs_idle={scs_idle_state}",
             generics={
                 "G_SCLK_IDLE_STATE": sclk_idle_state,
                 "G_SCS_IDLE_STATE": scs_idle_state,
+            },
+        )
+
+test = tb.test("02_transmit_edge")
+counter = 0
+for sclk_idle_state in ["'0'", "'1'"]:
+    for transmit_edge in ["'0'", "'1'"]:
+        counter += 1
+        test.add_config(
+            name=f"c{counter}.sclk_idle={sclk_idle_state}.transmit_toward_idle={transmit_edge}",
+            generics={
+                "G_SCLK_IDLE_STATE": sclk_idle_state,
+                "G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE": transmit_edge,
             },
         )
 

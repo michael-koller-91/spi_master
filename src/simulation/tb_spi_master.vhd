@@ -117,7 +117,7 @@ begin
     WaitForClock(clk, 10);
 
     while test_suite loop
-      if run("SCS_SCLK_timings") then
+      if run("01_SCS_SCLK_timings") then
         sclk_idle_state <= G_SCLK_IDLE_STATE;
         info("sclk_idle_state = " & to_string(sclk_idle_state));
 
@@ -142,7 +142,27 @@ begin
 
           WaitForClock(clk, 5);
         end loop;
+      elsif run("02_transmit_edge") then
+        transmit_on_sclk_edge_toward_idle_state <= G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
+        info("transmit_on_sclk_edge_toward_idle_state = " & to_string(transmit_on_sclk_edge_toward_idle_state));
+
+        sclk_divide_half <= 2;
+        info("sclk_divide_half = " & to_string(sclk_divide_half));
+
+        start <= '1';
+        WaitForClock(clk, 1);
+        start <= '0';
+
+        WaitForClock(clk, 1);
+        check_equal(ready, '0', result("for ready"));
+
+        wait until ready = '1';
+        WaitForClock(clk, 2);
       end if;
+      --elsif run("SCLK_divide") then
+      --  for divide_half in 2 to G_MAX_SCLK_DIVIDE_HALF loop
+
+    --  end loop;
     end loop;
 
     WaitForClock(clk, 10);
@@ -207,6 +227,7 @@ begin
   ---------------------------------------------------------------------------
   -- check SCLK and SCS idle state
   ---------------------------------------------------------------------------
+
   p_check_sclk_idle_state : process
   begin
     wait until start = '1';
@@ -295,6 +316,35 @@ begin
       count := count + 1;
     end loop;
     check_equal(count, G_N_BITS, result("for sample_sdo count"));
+  end process;
+
+  p_check_sample_strobe_edge : process
+    alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
+    alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
+  begin
+    wait until start = '1';
+
+    while not ready = '1' loop
+      -- the edge away from the idle state is always the first edge
+      wait on sclk;
+      if transmit_on_sclk_edge_toward_idle_state = '1' then
+        check_equal(sample_sdi, '1', result("for sample_sdi"));
+        check_equal(sample_sdo, '0', result("for sample_sdo"));
+      else
+        check_equal(sample_sdi, '0', result("for sample_sdi"));
+        check_equal(sample_sdo, '1', result("for sample_sdo"));
+      end if;
+
+      -- the edge toward the idle state is always the second edge
+      wait on sclk;
+      if transmit_on_sclk_edge_toward_idle_state = '1' then
+        check_equal(sample_sdi, '0', result("for sample_sdi"));
+        check_equal(sample_sdo, '1', result("for sample_sdo"));
+      else
+        check_equal(sample_sdi, '1', result("for sample_sdi"));
+        check_equal(sample_sdo, '0', result("for sample_sdo"));
+      end if;
+    end loop;
   end process;
 
 end architecture;
