@@ -216,7 +216,7 @@ begin
           WaitForClock(clk, 5);
         end loop;
       elsif run("06_receive") then
-        for k in 1 to 2 loop
+        for k in 1 to 20 loop
           d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
           WaitForClock(clk, 1);
 
@@ -243,50 +243,80 @@ begin
   -- check SCLK and SCS timing
   ---------------------------------------------------------------------------
 
-  p_check_time_sclk_and_scs : process
-    variable tic1 : time := 0 ns;
-    variable tic2 : time := 0 ns;
-    variable tic3 : time := 0 ns;
-    variable tic4 : time := 0 ns;
-    variable toc1 : time := 0 ns;
-    variable toc2 : time := 0 ns;
-    variable toc3 : time := 0 ns;
-    variable toc4 : time := 0 ns;
+  p_check_time_scs_active : process
+    variable tic : time := 0 ns;
+    variable toc : time := 0 ns;
   begin
     wait until start = '1';
 
     wait_until_scs_active(scs, scs_idle_state);
-    tic1 := now;
-
-    wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
-    toc1 := now;
-    info("Check timing SCS active and first SCLK edge");
-    check_equal((toc1 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK, "The time difference between SCS active and the first SCLK edge is not correct.");
-
-    tic2 := now;
-
-    tic3 := now;
-    for k in 1 to 2 * (n_bits - 1) loop
-      wait on sclk;
-      toc3 := now;
-      info("Check timing consecutive SCLK edges (k = " & to_string(k) & ").");
-      check_equal((toc3 - tic3) / C_CLK_PERIOD, sclk_divide_half, "The time difference between two consecutive SCLK edges is not correct.");
-      tic3 := now;
-    end loop;
-
-    wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
-    toc2 := now;
-    info("Check timing first and last SCLK edges.");
-    check_equal((toc2 - tic2) / C_CLK_PERIOD, n_bits * 2 * sclk_divide_half - sclk_divide_half, "The time difference between the first and the last SCLK edges is not correct.");
-    tic4 := now;
+    tic := now;
 
     wait_until_scs_inactive(scs, scs_idle_state);
-    toc4 := now;
-    info("Check timing last SCLK edge and SCS inactive.");
-    check_equal((toc4 - tic4) / C_CLK_PERIOD, G_N_CLKS_SCLK_TO_SCS, "The time difference between the last SCLK edge and SCS inactive is not correct.");
+    toc := now;
 
-    info("Check timing SCS active.");
-    check_equal((toc4 - tic1) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + n_bits * 2 * sclk_divide_half - sclk_divide_half + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct.");
+    check_equal((toc - tic) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK + n_bits * 2 * sclk_divide_half - sclk_divide_half + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct");
+  end process;
+
+  p_check_time_scs_to_sclk : process
+    variable tic : time := 0 ns;
+    variable toc : time := 0 ns;
+  begin
+    wait until start = '1';
+
+    wait_until_scs_active(scs, scs_idle_state);
+    tic := now;
+
+    wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
+    toc := now;
+
+    check_equal((toc - tic) / C_CLK_PERIOD, G_N_CLKS_SCS_TO_SCLK, "The time difference between SCS active and the first SCLK edge is not correct.");
+  end process;
+
+  p_check_time_sclk_to_scs : process
+    variable tic : time := 0 ns;
+    variable toc : time := 0 ns;
+  begin
+    wait until start = '1';
+
+    wait_until_scs_active(scs, scs_idle_state);
+
+    -- wait for the last SCLK edge before SCS inactive
+    while not scs = scs_idle_state loop
+      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
+      tic := now;
+    end loop;
+    toc := now;
+
+    check_equal((toc - tic) / C_CLK_PERIOD, G_N_CLKS_SCLK_TO_SCS, "The time difference between the last SCLK edge and SCS inactive is not correct.");
+  end process;
+
+  p_check_time_sclk : process
+    variable tic            : time    := 0 ns;
+    variable toc            : time    := 0 ns;
+    variable tic_first_edge : time    := 0 ns;
+    variable edge_counter   : integer := 0;
+  begin
+    wait until start = '1';
+
+    wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
+    edge_counter   := 1;
+    tic_first_edge := now;
+    tic            := now;
+
+    while not scs = scs_idle_state loop
+      wait on sclk, scs;
+      if not scs = scs_idle_state then
+        edge_counter := edge_counter + 1;
+        toc          := now;
+
+        check_equal((toc - tic) / C_CLK_PERIOD, sclk_divide_half, "The time difference between two consecutive SCLK edges is not correct (edge_counter = " & to_string(edge_counter) & ").");
+
+        tic := now;
+      end if;
+    end loop;
+
+    check_equal((toc - tic_first_edge) / C_CLK_PERIOD, n_bits * 2 * sclk_divide_half - sclk_divide_half, "The time difference between the first and the last SCLK edges is not correct.");
   end process;
 
   ---------------------------------------------------------------------------
