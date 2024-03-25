@@ -98,8 +98,12 @@ for n_bits_minus_1 in [0, 1, 2]:
         },
     )
 
-test = tb.test("05_transmit")
 seed = random.randint(1_000_000, 9_999_999)
+
+test = tb.test("05_transmit")
+test.add_config(name=f"rng_seed={seed}", generics={"G_RNG_SEED": seed})
+
+test = tb.test("06_receive")
 test.add_config(name=f"rng_seed={seed}", generics={"G_RNG_SEED": seed})
 
 waveform_filename = "waveform.tcl"

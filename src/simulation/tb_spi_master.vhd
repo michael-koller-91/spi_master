@@ -64,15 +64,16 @@ architecture arch of tb_spi_master is
 
   constant C_CLK_PERIOD : time := 10 ns;
 
-  signal clk                : std_ulogic                                       := '0';
-  signal d_from_peripheral  : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
-  signal d_to_peripheral    : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
-  signal start              : std_ulogic                                       := '0';
-  signal ready              : std_ulogic                                       := '0';
-  signal sclk               : std_ulogic                                       := '0';
-  signal sd_from_peripheral : std_ulogic                                       := '0';
-  signal sd_to_peripheral   : std_ulogic                                       := '0';
-  signal scs                : std_ulogic                                       := '0';
+  signal clk                        : std_ulogic                                       := '0';
+  signal d_from_peripheral          : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal d_from_peripheral_expected : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal d_to_peripheral            : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal start                      : std_ulogic                                       := '0';
+  signal ready                      : std_ulogic                                       := '0';
+  signal sclk                       : std_ulogic                                       := '0';
+  signal sd_from_peripheral         : std_ulogic                                       := '0';
+  signal sd_to_peripheral           : std_ulogic                                       := '0';
+  signal scs                        : std_ulogic                                       := '0';
 
   signal n_bits           : natural range 1 to G_MAX_N_BITS_MINUS_1 + 1;
   signal i_n_bits_minus_1 : unsigned(positive(realmax(ceil(log2(real(G_MAX_N_BITS_MINUS_1 + 1))), 1.0)) - 1 downto 0) := (others => '1');
@@ -82,9 +83,6 @@ architecture arch of tb_spi_master is
   signal sclk_idle_state                         : std_ulogic                                                                    := G_SCLK_IDLE_STATE;
   signal scs_idle_state                          : std_ulogic                                                                    := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                                    := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
-
-  signal e_check_data_to_peripheral : event_t := new_event("check_data_to_peripheral");
-  signal e_done                     : event_t := new_event("done");
 
 begin
 
@@ -213,8 +211,20 @@ begin
           WaitForClock(clk, 1);
           start <= '0';
 
-          notify(e_check_data_to_peripheral);
-          wait until is_active(e_done);
+          wait until ready = '1';
+
+          WaitForClock(clk, 5);
+        end loop;
+      elsif run("06_receive") then
+        for k in 1 to 2 loop
+          d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
+          WaitForClock(clk, 1);
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          wait until ready = '1';
 
           WaitForClock(clk, 5);
         end loop;
@@ -408,7 +418,7 @@ begin
 
   p_check_data_to_peripheral : process
   begin
-    wait until is_active(e_check_data_to_peripheral);
+    wait until start = '1';
 
     for n in 0 to n_bits - 1 loop
       if transmit_on_sclk_edge_toward_idle_state = '1' then
@@ -418,9 +428,24 @@ begin
       end if;
       check_equal(sd_to_peripheral, d_to_peripheral(n), result("for sd_to_peripheral"));
     end loop;
+  end process;
+
+  p_check_data_from_peripheral : process
+  begin
+    wait until start = '1';
+
+    for n in n_bits - 1 downto 0 loop
+      sd_from_peripheral <= d_from_peripheral_expected(n);
+      if transmit_on_sclk_edge_toward_idle_state = '1' then
+        wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
+      else
+        wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
+      end if;
+      WaitForClock(clk, 1);
+    end loop;
 
     wait until ready = '1';
-    notify(e_done);
+    check_equal(d_from_peripheral, d_from_peripheral_expected, result("for d_from_peripheral"));
   end process;
 
 end architecture;

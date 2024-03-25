@@ -51,8 +51,9 @@ architecture arch of spi_master is
   type t_state is (idle, wait_sclk, trx, wait_scs);
   signal state : t_state := idle;
 
-  signal ready      : std_ulogic := '0';
-  signal reset_sclk : std_ulogic := '1';
+  signal ready          : std_ulogic := '0';
+  signal reset_sclk     : std_ulogic := '1';
+  signal reset_sclk_old : std_ulogic := '1';
 
   signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF := 2;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                := '1';
@@ -75,7 +76,9 @@ begin
   p_output_data_from_peripheral : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      if ready = '1' then
+      -- hold output stable when SCLK stops (so it can be sampled with o_ready)
+      reset_sclk_old <= reset_sclk;
+      if reset_sclk_old = '0' and reset_sclk = '1' then
         o_d_from_peripheral <= d_from_peripheral;
       end if;
     end if;
