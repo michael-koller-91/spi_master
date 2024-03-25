@@ -8,10 +8,12 @@ context vunit_lib.vunit_context;
 
 library osvvm;
 use osvvm.TbUtilPkg.all;
+use osvvm.RandomPkg.all;
 
 entity tb_spi_master is
   generic (
     runner_cfg                                : string;
+    G_RNG_SEED                                : integer    := 2;
     G_SCLK_IDLE_STATE                         : std_ulogic := '1';
     G_SCS_IDLE_STATE                          : std_ulogic := '1';
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
@@ -81,6 +83,9 @@ architecture arch of tb_spi_master is
   signal scs_idle_state                          : std_ulogic                                                                    := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                                    := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
+  signal e_check_data_to_peripheral : event_t := new_event("check_data_to_peripheral");
+  signal e_done                     : event_t := new_event("done");
+
 begin
 
   i_n_bits_minus_1   <= to_unsigned(n_bits - 1, i_n_bits_minus_1'length);
@@ -116,8 +121,12 @@ begin
   CreateClock(clk, C_CLK_PERIOD);
 
   main : process
+    variable RV : RandomPType;
   begin
     test_runner_setup(runner, runner_cfg);
+
+    RV.InitSeed(G_RNG_SEED);
+    info("G_RNG_SEED = " & to_string(G_RNG_SEED));
 
     --
     -- by default, use the testbench generics
@@ -192,6 +201,22 @@ begin
           check_equal(ready, '0', result("for ready"));
 
           wait until ready = '1';
+
+          WaitForClock(clk, 5);
+        end loop;
+      elsif run("05_transmit") then
+        for k in 1 to 20 loop
+          d_to_peripheral <= RV.RandSlv(d_to_peripheral'length);
+          WaitForClock(clk, 1);
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          notify(e_check_data_to_peripheral);
+          wait until is_active(e_done);
+
+          WaitForClock(clk, 5);
         end loop;
       end if;
     end loop;
@@ -375,6 +400,27 @@ begin
         check_equal(sample_sdo, '0', result("for sample_sdo"));
       end if;
     end loop;
+  end process;
+
+  ---------------------------------------------------------------------------
+  -- check data
+  ---------------------------------------------------------------------------
+
+  p_check_data_to_peripheral : process
+  begin
+    wait until is_active(e_check_data_to_peripheral);
+
+    for n in 0 to n_bits - 1 loop
+      if transmit_on_sclk_edge_toward_idle_state = '1' then
+        wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
+      else
+        wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
+      end if;
+      check_equal(sd_to_peripheral, d_to_peripheral(n), result("for sd_to_peripheral"));
+    end loop;
+
+    wait until ready = '1';
+    notify(e_done);
   end process;
 
 end architecture;

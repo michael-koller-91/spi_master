@@ -104,7 +104,7 @@ begin
 
           if counter_n_sclk_edges = 0 and counter_clk_divide = 1 then
             state                      <= wait_scs;
-            counter_n_clks_sclk_to_scs <= C_N_CLKS_SCLK_TO_SCS-1;
+            counter_n_clks_sclk_to_scs <= C_N_CLKS_SCLK_TO_SCS - 1;
           end if;
 
         when wait_scs =>
@@ -130,7 +130,7 @@ begin
     end if;
   end process;
 
-  p_sample_strobes : process(all)
+  p_generate_sample_strobes : process(all)
   begin
     if transmit_on_sclk_edge_toward_idle_state = '1' then
       if i_sclk_idle_state = '1' then
@@ -151,7 +151,7 @@ begin
     end if;
   end process;
 
-  p_sclk : process(i_clk)
+  p_generate_sclk : process(i_clk)
   begin
     if rising_edge(i_clk) then
       if reset_sclk = '1' then
@@ -187,8 +187,8 @@ begin
       if i_start = '1' then
         d_to_peripheral <= i_d_to_peripheral;
       else
+        o_sd_to_peripheral <= d_to_peripheral(0);
         if sample_sdo = '1' then
-          o_sd_to_peripheral                                 <= d_to_peripheral(0);
           d_to_peripheral(d_to_peripheral'left - 1 downto 0) <= d_to_peripheral(d_to_peripheral'left downto 1);
         end if;
       end if;
