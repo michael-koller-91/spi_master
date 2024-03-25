@@ -1,3 +1,4 @@
 * TODO a stability checker for the ready signal
 * TODO scs and sclk distances as ports instead of generics 
 * TODO should there be a minus_1 for divide_half as well?
+* TODO the i_* and o_* testbench signal names are not appropriate since they are no port signals
