@@ -10,39 +10,42 @@ entity spi_master is
   generic (
     -- the number of clock cycles from SCS active to the first SCLK edge
     G_N_CLKS_SCS_TO_SCLK   : positive := 1;
+    --
     -- the number of clock cycles from the last SCLK edge to SCS inactive
     G_N_CLKS_SCLK_TO_SCS   : positive := 1;
+    --
     -- the maximum number of bits to receive/transmit
     G_MAX_N_BITS           : positive := 6;
+    --
     -- the maximum number of clock cycles for half an SCLK cycle
     -- Example 1:
     --    With G_MAX_SCLK_DIVIDE_HALF = 1, the system clock (i_clk)
-    --    will be divided by 1 * 2. A 10 MHz system clock will lead to
+    --    can be divided by 1 * 2. A 10 MHz system clock will lead to
     --    a 5 MHz SCLK.
     -- Example 2:
     --    With G_MAX_SCLK_DIVIDE_HALF = 2, the system clock (i_clk)
     --    can be divided by 1 * 2 or 2 * 2. A 10 MHz system clock will lead to
-    --    a 5 MHz or a 10 MHz SCLK.
+    --    a 5 MHz or a 2.5 MHz SCLK.
     G_MAX_SCLK_DIVIDE_HALF : positive := 2
     );
   port (
-    i_clk                                     : in  std_ulogic                                                   := '0';
-    i_start                                   : in  std_ulogic                                                   := '0';
-    o_ready                                   : out std_ulogic                                                   := '0';
+    i_clk                                     : in  std_ulogic                                               := '0';
+    i_start                                   : in  std_ulogic                                               := '0';
+    o_ready                                   : out std_ulogic                                               := '0';
     -- data
-    i_d_to_peripheral                         : in  std_ulogic_vector(G_MAX_N_BITS - 1 downto 0)                 := (others => '0');
-    o_d_from_peripheral                       : out std_ulogic_vector(G_MAX_N_BITS - 1 downto 0)                 := (others => '0');
+    i_d_to_peripheral                         : in  std_ulogic_vector(G_MAX_N_BITS - 1 downto 0)             := (others => '0');
+    o_d_from_peripheral                       : out std_ulogic_vector(G_MAX_N_BITS - 1 downto 0)             := (others => '0');
     -- setings
-    i_n_bits_minus_1                          : in  unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0)               := (others => '1');
-    i_sclk_idle_state                         : in  std_ulogic                                                   := '1';
-    i_sclk_divide_half                        : in  unsigned(ceil_log2(G_MAX_SCLK_DIVIDE_HALF + 1) - 1 downto 0) := (others => '1');
-    i_scs_idle_state                          : in  std_ulogic                                                   := '1';
-    i_transmit_on_sclk_edge_toward_idle_state : in  std_ulogic                                                   := '1';
+    i_n_bits_minus_1                          : in  unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0)           := (others => '1');
+    i_sclk_idle_state                         : in  std_ulogic                                               := '1';
+    i_sclk_divide_half_minus_1                : in  unsigned(ceil_log2(G_MAX_SCLK_DIVIDE_HALF) - 1 downto 0) := (others => '1');
+    i_scs_idle_state                          : in  std_ulogic                                               := '1';
+    i_transmit_on_sclk_edge_toward_idle_state : in  std_ulogic                                               := '1';
     -- SPI signals
-    o_sclk                                    : out std_ulogic                                                   := '1';
-    i_sd_from_peripheral                      : in  std_ulogic                                                   := '0';
-    o_sd_to_peripheral                        : out std_ulogic                                                   := '0';
-    o_scs                                     : out std_ulogic                                                   := '1'
+    o_sclk                                    : out std_ulogic                                               := '1';
+    i_sd_from_peripheral                      : in  std_ulogic                                               := '0';
+    o_sd_to_peripheral                        : out std_ulogic                                               := '0';
+    o_scs                                     : out std_ulogic                                               := '1'
     );
 end entity;
 
@@ -51,10 +54,10 @@ architecture arch of spi_master is
   constant C_N_CLKS_SCLK_TO_SCS : natural := G_N_CLKS_SCLK_TO_SCS;
   constant C_N_CLKS_SCS_TO_SCLK : natural := G_N_CLKS_SCS_TO_SCLK - 1;
 
-  signal counter_n_sclk_edges       : natural range 0 to 2 * G_MAX_N_BITS - 1   := 2 * G_MAX_N_BITS - 1;
-  signal counter_n_clks_sclk_to_scs : natural range 0 to C_N_CLKS_SCLK_TO_SCS   := C_N_CLKS_SCLK_TO_SCS;
-  signal counter_n_clks_scs_to_sclk : natural range 0 to C_N_CLKS_SCS_TO_SCLK   := C_N_CLKS_SCS_TO_SCLK;
-  signal counter_clk_divide         : natural range 0 to G_MAX_SCLK_DIVIDE_HALF := G_MAX_SCLK_DIVIDE_HALF;
+  signal counter_n_sclk_edges       : natural range 0 to 2 * G_MAX_N_BITS - 1       := 2 * G_MAX_N_BITS - 1;
+  signal counter_n_clks_sclk_to_scs : natural range 0 to C_N_CLKS_SCLK_TO_SCS       := C_N_CLKS_SCLK_TO_SCS;
+  signal counter_n_clks_scs_to_sclk : natural range 0 to C_N_CLKS_SCS_TO_SCLK       := C_N_CLKS_SCS_TO_SCLK;
+  signal counter_clk_divide         : natural range 0 to G_MAX_SCLK_DIVIDE_HALF - 1 := 0;
 
   signal sclk : std_ulogic := '1';
   signal scs  : std_ulogic := '1';
@@ -70,8 +73,8 @@ architecture arch of spi_master is
   signal reset_sclk     : std_ulogic := '1';
   signal reset_sclk_old : std_ulogic := '1';
 
-  signal sclk_divide_half                        : natural range 1 to G_MAX_SCLK_DIVIDE_HALF := 1;
-  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                := '1';
+  signal sclk_divide_half_minus_1                : natural range 0 to G_MAX_SCLK_DIVIDE_HALF - 1 := 0;
+  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                    := '1';
 
   signal d_to_peripheral   : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
   signal d_from_peripheral : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
@@ -82,7 +85,7 @@ begin
   begin
     if rising_edge(i_clk) then
       if i_start = '1' then
-        sclk_divide_half                        <= to_integer(i_sclk_divide_half);
+        sclk_divide_half_minus_1                <= to_integer(i_sclk_divide_half_minus_1);
         transmit_on_sclk_edge_toward_idle_state <= i_transmit_on_sclk_edge_toward_idle_state;
       end if;
     end if;
@@ -117,13 +120,13 @@ begin
 
         when trx =>
           if counter_n_sclk_edges = 0 then
-            if counter_clk_divide = 1 then
+            if counter_clk_divide = 0 then
               reset_sclk                 <= '1';
               state                      <= wait_scs;
               counter_n_clks_sclk_to_scs <= C_N_CLKS_SCLK_TO_SCS - 1;
             end if;
           else
-            if counter_clk_divide = 1 then
+            if counter_clk_divide = 0 then
               counter_n_sclk_edges <= counter_n_sclk_edges - 1;
             end if;
           end if;
@@ -179,16 +182,13 @@ begin
   begin
     if rising_edge(i_clk) then
       if reset_sclk = '1' then
-        counter_clk_divide <= 1;
+        counter_clk_divide <= 0;
         sclk               <= i_sclk_idle_state;
         sclk_edge          <= '0';
       else
         sclk_edge <= '0';
-        -- `counter_clk_divide` counts `sclk_divide_half` clock cycles (i_clk):
-        --   from sclk_divide_half - 1 downto 0
-        --   <=> from sclk_divide_half downto 1
-        if counter_clk_divide = 1 then
-          counter_clk_divide <= sclk_divide_half;
+        if counter_clk_divide = 0 then
+          counter_clk_divide <= sclk_divide_half_minus_1;
           sclk               <= not sclk;
           sclk_edge          <= '1';
         else

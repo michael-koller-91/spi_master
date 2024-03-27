@@ -78,19 +78,20 @@ architecture arch of tb_spi_master is
   signal sd_to_peripheral           : std_ulogic                                   := '0';
   signal scs                        : std_ulogic                                   := '0';
 
-  signal n_bits           : natural range 1 to G_MAX_N_BITS;
-  signal i_n_bits_minus_1 : unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0) := (others => '1');
+  signal n_bits         : natural range 1 to G_MAX_N_BITS := 1;
+  signal n_bits_minus_1 : unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0) := (others => '1');
 
-  signal i_sclk_divide_half                      : unsigned(ceil_log2(G_MAX_SCLK_DIVIDE_HALF + 1) - 1 downto 0) := (others => '1');
-  signal sclk_divide_half                        : natural range 1 to G_MAX_SCLK_DIVIDE_HALF                    := 1;
-  signal sclk_idle_state                         : std_ulogic                                                   := G_SCLK_IDLE_STATE;
-  signal scs_idle_state                          : std_ulogic                                                   := G_SCS_IDLE_STATE;
-  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                   := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
+  signal sclk_divide_half         : natural range 1 to G_MAX_SCLK_DIVIDE_HALF                := 1;
+  signal sclk_divide_half_minus_1 : unsigned(ceil_log2(G_MAX_SCLK_DIVIDE_HALF) - 1 downto 0) := (others => '1');
+
+  signal sclk_idle_state                         : std_ulogic := G_SCLK_IDLE_STATE;
+  signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
+  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
 begin
 
-  i_n_bits_minus_1   <= to_unsigned(n_bits - 1, i_n_bits_minus_1'length);
-  i_sclk_divide_half <= to_unsigned(sclk_divide_half, i_sclk_divide_half'length);
+  n_bits_minus_1           <= to_unsigned(n_bits - 1, n_bits_minus_1'length);
+  sclk_divide_half_minus_1 <= to_unsigned(sclk_divide_half - 1, sclk_divide_half_minus_1'length);
 
   e_dut : entity work.spi_master(arch)
     generic map(
@@ -106,9 +107,9 @@ begin
       o_d_from_peripheral                       => d_from_peripheral,
       i_d_to_peripheral                         => d_to_peripheral,
       --
-      i_n_bits_minus_1                          => i_n_bits_minus_1,
+      i_n_bits_minus_1                          => n_bits_minus_1,
       i_sclk_idle_state                         => sclk_idle_state,
-      i_sclk_divide_half                        => i_sclk_divide_half,
+      i_sclk_divide_half_minus_1                => sclk_divide_half_minus_1,
       i_scs_idle_state                          => scs_idle_state,
       i_transmit_on_sclk_edge_toward_idle_state => transmit_on_sclk_edge_toward_idle_state,
       --
