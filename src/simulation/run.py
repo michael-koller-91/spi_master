@@ -78,7 +78,7 @@ for sclk_idle_state in ["'0'", "'1'"]:
 
 test = tb.test("03_sclk_divide")
 counter = 0
-for divide in [2, 5, 10]:
+for divide in [1, 2, 5, 10]:
     counter += 1
     test.add_config(
         name=f"c{counter}.max_sclk_divide={divide}",

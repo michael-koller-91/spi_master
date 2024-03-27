@@ -23,7 +23,7 @@ entity tb_spi_master is
     G_N_CLKS_SCS_TO_SCLK                      : positive   := 3;
     G_N_CLKS_SCLK_TO_SCS                      : positive   := 4;
     G_MAX_N_BITS                              : positive   := 4;
-    G_MAX_SCLK_DIVIDE_HALF                    : positive   := 4
+    G_MAX_SCLK_DIVIDE_HALF                    : positive   := 2
     );
 end entity;
 
@@ -82,7 +82,7 @@ architecture arch of tb_spi_master is
   signal i_n_bits_minus_1 : unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0) := (others => '1');
 
   signal i_sclk_divide_half                      : unsigned(ceil_log2(G_MAX_SCLK_DIVIDE_HALF + 1) - 1 downto 0) := (others => '1');
-  signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF                    := 2;
+  signal sclk_divide_half                        : natural range 1 to G_MAX_SCLK_DIVIDE_HALF                    := 1;
   signal sclk_idle_state                         : std_ulogic                                                   := G_SCLK_IDLE_STATE;
   signal scs_idle_state                          : std_ulogic                                                   := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                   := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
@@ -136,7 +136,6 @@ begin
     sclk_idle_state                         <= G_SCLK_IDLE_STATE;
     scs_idle_state                          <= G_SCS_IDLE_STATE;
     sclk_divide_half                        <= G_MAX_SCLK_DIVIDE_HALF;
-    sclk_divide_half                        <= G_MAX_SCLK_DIVIDE_HALF;
     transmit_on_sclk_edge_toward_idle_state <= G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
     --
     WaitForClock(clk, 1);
@@ -172,7 +171,7 @@ begin
 
         wait until ready = '1';
       elsif run("03_sclk_divide") then
-        for divide_half in 2 to G_MAX_SCLK_DIVIDE_HALF loop
+        for divide_half in 1 to G_MAX_SCLK_DIVIDE_HALF loop
           sclk_divide_half <= divide_half;
           WaitForClock(clk, 1);
           info("sclk_divide_half = " & to_string(sclk_divide_half));

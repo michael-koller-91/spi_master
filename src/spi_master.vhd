@@ -8,9 +8,21 @@ use work.spi_package.all;
 
 entity spi_master is
   generic (
-    G_N_CLKS_SCS_TO_SCLK   : positive := 1;  -- natural?
-    G_N_CLKS_SCLK_TO_SCS   : positive := 1;  -- natural?
+    -- the number of clock cycles from SCS active to the first SCLK edge
+    G_N_CLKS_SCS_TO_SCLK   : positive := 1;
+    -- the number of clock cycles from the last SCLK edge to SCS inactive
+    G_N_CLKS_SCLK_TO_SCS   : positive := 1;
+    -- the maximum number of bits to receive/transmit
     G_MAX_N_BITS           : positive := 6;
+    -- the maximum number of clock cycles for half an SCLK cycle
+    -- Example 1:
+    --    With G_MAX_SCLK_DIVIDE_HALF = 1, the system clock (i_clk)
+    --    will be divided by 1 * 2. A 10 MHz system clock will lead to
+    --    a 5 MHz SCLK.
+    -- Example 2:
+    --    With G_MAX_SCLK_DIVIDE_HALF = 2, the system clock (i_clk)
+    --    can be divided by 1 * 2 or 2 * 2. A 10 MHz system clock will lead to
+    --    a 5 MHz or a 10 MHz SCLK.
     G_MAX_SCLK_DIVIDE_HALF : positive := 2
     );
   port (
@@ -42,7 +54,7 @@ architecture arch of spi_master is
   signal counter_n_sclk_edges       : natural range 0 to 2 * G_MAX_N_BITS - 1   := 2 * G_MAX_N_BITS - 1;
   signal counter_n_clks_sclk_to_scs : natural range 0 to C_N_CLKS_SCLK_TO_SCS   := C_N_CLKS_SCLK_TO_SCS;
   signal counter_n_clks_scs_to_sclk : natural range 0 to C_N_CLKS_SCS_TO_SCLK   := C_N_CLKS_SCS_TO_SCLK;
-  signal counter_clk_divide         : natural range 1 to G_MAX_SCLK_DIVIDE_HALF := 1;
+  signal counter_clk_divide         : natural range 0 to G_MAX_SCLK_DIVIDE_HALF := G_MAX_SCLK_DIVIDE_HALF;
 
   signal sclk : std_ulogic := '1';
   signal scs  : std_ulogic := '1';
@@ -58,7 +70,7 @@ architecture arch of spi_master is
   signal reset_sclk     : std_ulogic := '1';
   signal reset_sclk_old : std_ulogic := '1';
 
-  signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF := 2;
+  signal sclk_divide_half                        : natural range 1 to G_MAX_SCLK_DIVIDE_HALF := 1;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                := '1';
 
   signal d_to_peripheral   : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
@@ -104,17 +116,19 @@ begin
           end if;
 
         when trx =>
-          if sclk_edge = '1' then
-            counter_n_sclk_edges <= counter_n_sclk_edges - 1;
-          end if;
-
-          if counter_n_sclk_edges = 0 and counter_clk_divide = 1 then
-            state                      <= wait_scs;
-            counter_n_clks_sclk_to_scs <= C_N_CLKS_SCLK_TO_SCS - 1;
+          if counter_n_sclk_edges = 0 then
+            if counter_clk_divide = 1 then
+              reset_sclk                 <= '1';
+              state                      <= wait_scs;
+              counter_n_clks_sclk_to_scs <= C_N_CLKS_SCLK_TO_SCS - 1;
+            end if;
+          else
+            if counter_clk_divide = 1 then
+              counter_n_sclk_edges <= counter_n_sclk_edges - 1;
+            end if;
           end if;
 
         when wait_scs =>
-          reset_sclk <= '1';
           if counter_n_clks_sclk_to_scs = 0 then
             scs   <= i_scs_idle_state;
             ready <= '1';
@@ -127,7 +141,11 @@ begin
           ready <= '0';
           scs   <= i_scs_idle_state;  -- make in-port change visible at out-port without the need of a start strobe
           if i_start = '1' then
+            -- `counter_n_sclk_edges` counts 2 * n_bits sclk edges:
+            --    from 2 * n_bits - 1 downto 0
+            --    <=> from 2 * (n_bits - 1) + 1 downto 0
             counter_n_sclk_edges       <= to_integer(i_n_bits_minus_1 & '0') + 1;
+            --
             counter_n_clks_scs_to_sclk <= C_N_CLKS_SCS_TO_SCLK;
             scs                        <= not i_scs_idle_state;
             state                      <= wait_sclk;
@@ -166,6 +184,9 @@ begin
         sclk_edge          <= '0';
       else
         sclk_edge <= '0';
+        -- `counter_clk_divide` counts `sclk_divide_half` clock cycles (i_clk):
+        --   from sclk_divide_half - 1 downto 0
+        --   <=> from sclk_divide_half downto 1
         if counter_clk_divide = 1 then
           counter_clk_divide <= sclk_divide_half;
           sclk               <= not sclk;
