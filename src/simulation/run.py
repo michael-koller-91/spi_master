@@ -89,12 +89,12 @@ for divide in [2, 5, 10]:
 
 test = tb.test("04_n_bits")
 counter = 0
-for n_bits_minus_1 in [0, 1, 2]:
+for n_bits in [1, 2, 3, 4]:
     counter += 1
     test.add_config(
-        name=f"c{counter}.max_n_bits_minus_1={n_bits_minus_1}",
+        name=f"c{counter}.max_n_bits={n_bits}",
         generics={
-            "G_MAX_N_BITS_MINUS_1": n_bits_minus_1,
+            "G_MAX_N_BITS": n_bits,
         },
     )
 

@@ -3,11 +3,14 @@ use ieee.math_real.all;
 use ieee.numeric_std.all;
 use ieee.std_logic_1164.all;
 
+library work;
+use work.spi_package.all;
+
 entity spi_master is
   generic (
     G_N_CLKS_SCS_TO_SCLK   : positive := 1;  -- natural?
     G_N_CLKS_SCLK_TO_SCS   : positive := 1;  -- natural?
-    G_MAX_N_BITS_MINUS_1   : natural  := 5;
+    G_MAX_N_BITS   : positive  := 6;
     G_MAX_SCLK_DIVIDE_HALF : positive := 2
     );
   port (
@@ -15,10 +18,10 @@ entity spi_master is
     i_start                                   : in  std_ulogic                                                                                := '0';
     o_ready                                   : out std_ulogic                                                                                := '0';
     -- data
-    i_d_to_peripheral                         : in  std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0)                                          := (others => '0');
-    o_d_from_peripheral                       : out std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0)                                          := (others => '0');
+    i_d_to_peripheral                         : in  std_ulogic_vector(G_MAX_N_BITS - 1 downto 0)                                          := (others => '0');
+    o_d_from_peripheral                       : out std_ulogic_vector(G_MAX_N_BITS - 1 downto 0)                                          := (others => '0');
     -- setings
-    i_n_bits_minus_1                          : in  unsigned(positive(realmax(ceil(log2(real(G_MAX_N_BITS_MINUS_1 + 1))), 1.0)) - 1 downto 0) := (others => '1');
+    i_n_bits_minus_1                          : in  unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0) := (others => '1');
     i_sclk_idle_state                         : in  std_ulogic                                                                                := '1';
     i_sclk_divide_half                        : in  unsigned(positive(ceil(log2(real(G_MAX_SCLK_DIVIDE_HALF + 1)))) - 1 downto 0)             := (others => '1');
     i_scs_idle_state                          : in  std_ulogic                                                                                := '1';
@@ -36,7 +39,7 @@ architecture arch of spi_master is
   constant C_N_CLKS_SCLK_TO_SCS : natural := G_N_CLKS_SCLK_TO_SCS;
   constant C_N_CLKS_SCS_TO_SCLK : natural := G_N_CLKS_SCS_TO_SCLK - 1;
 
-  signal counter_n_sclk_edges       : natural range 0 to 2 * (G_MAX_N_BITS_MINUS_1 + 1) - 1 := 2 * (G_MAX_N_BITS_MINUS_1 + 1) - 1;
+  signal counter_n_sclk_edges       : natural range 0 to 2 * G_MAX_N_BITS - 1 := 2 * G_MAX_N_BITS - 1;
   signal counter_n_clks_sclk_to_scs : natural range 0 to C_N_CLKS_SCLK_TO_SCS               := C_N_CLKS_SCLK_TO_SCS;
   signal counter_n_clks_scs_to_sclk : natural range 0 to C_N_CLKS_SCS_TO_SCLK               := C_N_CLKS_SCS_TO_SCLK;
   signal counter_clk_divide         : natural range 1 to G_MAX_SCLK_DIVIDE_HALF             := 1;
@@ -58,8 +61,8 @@ architecture arch of spi_master is
   signal sclk_divide_half                        : natural range 2 to G_MAX_SCLK_DIVIDE_HALF := 2;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                := '1';
 
-  signal d_to_peripheral   : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
-  signal d_from_peripheral : std_ulogic_vector(G_MAX_N_BITS_MINUS_1 downto 0) := (others => '0');
+  signal d_to_peripheral   : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
+  signal d_from_peripheral : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
 
 begin
 
