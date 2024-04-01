@@ -21,7 +21,7 @@ entity tb_spi_master is
     G_SCS_IDLE_STATE                          : std_ulogic := '1';
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
     G_MAX_N_CLKS_SCS_TO_SCLK                  : positive   := 3;
-    G_N_CLKS_SCLK_TO_SCS                      : positive   := 4;
+    G_MAX_N_CLKS_SCLK_TO_SCS                  : positive   := 4;
     G_MAX_N_BITS                              : positive   := 4;
     G_MAX_SCLK_DIVIDE_HALF                    : positive   := 2
     );
@@ -87,6 +87,9 @@ architecture arch of tb_spi_master is
   signal n_clks_scs_to_sclk         : natural range 1 to G_MAX_N_CLKS_SCS_TO_SCLK                := 1;
   signal n_clks_scs_to_sclk_minus_1 : unsigned(ceil_log2(G_MAX_N_CLKS_SCS_TO_SCLK) - 1 downto 0) := (others => '1');
 
+  signal n_clks_sclk_to_scs         : natural range 1 to G_MAX_N_CLKS_SCLK_TO_SCS                := 1;
+  signal n_clks_sclk_to_scs_minus_1 : unsigned(ceil_log2(G_MAX_N_CLKS_SCLK_TO_SCS) - 1 downto 0) := (others => '1');
+
   signal sclk_idle_state                         : std_ulogic := G_SCLK_IDLE_STATE;
   signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
@@ -96,11 +99,12 @@ begin
   sclk_divide_half_minus_1   <= to_unsigned(sclk_divide_half - 1, sclk_divide_half_minus_1'length);
   n_bits_minus_1             <= to_unsigned(n_bits - 1, n_bits_minus_1'length);
   n_clks_scs_to_sclk_minus_1 <= to_unsigned(n_clks_scs_to_sclk - 1, n_clks_scs_to_sclk_minus_1'length);
+  n_clks_sclk_to_scs_minus_1 <= to_unsigned(n_clks_sclk_to_scs - 1, n_clks_sclk_to_scs_minus_1'length);
 
   e_dut : entity work.spi_master(arch)
     generic map(
       G_MAX_N_CLKS_SCS_TO_SCLK => G_MAX_N_CLKS_SCS_TO_SCLK,
-      G_N_CLKS_SCLK_TO_SCS     => G_N_CLKS_SCLK_TO_SCS,
+      G_MAX_N_CLKS_SCLK_TO_SCS => G_MAX_N_CLKS_SCLK_TO_SCS,
       G_MAX_N_BITS             => G_MAX_N_BITS,
       G_MAX_SCLK_DIVIDE_HALF   => G_MAX_SCLK_DIVIDE_HALF
       )
@@ -118,6 +122,7 @@ begin
       i_sclk_divide_half_minus_1                => sclk_divide_half_minus_1,
       i_n_bits_minus_1                          => n_bits_minus_1,
       i_n_clks_scs_to_sclk_minus_1              => n_clks_scs_to_sclk_minus_1,
+      i_n_clks_sclk_to_scs_minus_1              => n_clks_sclk_to_scs_minus_1,
       --
       o_scs                                     => scs,
       o_sclk                                    => sclk,
@@ -145,6 +150,7 @@ begin
     sclk_divide_half                        <= G_MAX_SCLK_DIVIDE_HALF;
     n_bits                                  <= G_MAX_N_BITS;
     n_clks_scs_to_sclk                      <= G_MAX_N_CLKS_SCS_TO_SCLK;
+    n_clks_sclk_to_scs                      <= G_MAX_N_CLKS_SCLK_TO_SCS;
     --
     WaitForClock(clk, 1);
     --
@@ -155,6 +161,7 @@ begin
     info("sclk_divide_half = " & to_string(sclk_divide_half));
     info("n_bits = " & to_string(n_bits));
     info("n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
+    info("n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
     info("-- end init");
 
     WaitForClock(clk, 10);
@@ -253,6 +260,20 @@ begin
 
           WaitForClock(clk, 5);
         end loop;
+      elsif run("08_max_n_clks_sclk_to_scs") then
+        for clks_sclk_to_scs in 1 to G_MAX_N_CLKS_SCLK_TO_SCS loop
+          n_clks_sclk_to_scs <= clks_sclk_to_scs;
+          WaitForClock(clk, 1);
+          info("n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          wait until ready = '1';
+
+          WaitForClock(clk, 5);
+        end loop;
       end if;
     end loop;
 
@@ -280,7 +301,7 @@ begin
     wait_until_scs_inactive(scs, scs_idle_state);
     toc := now;
 
-    check_equal((toc - tic) / C_CLK_PERIOD, n_clks_scs_to_sclk + n_bits * 2 * sclk_divide_half - sclk_divide_half + G_N_CLKS_SCLK_TO_SCS, "The SCS active time is not correct");
+    check_equal((toc - tic) / C_CLK_PERIOD, n_clks_scs_to_sclk + n_bits * 2 * sclk_divide_half - sclk_divide_half + n_clks_sclk_to_scs, "The SCS active time is not correct");
   end process;
 
   p_check_time_scs_to_sclk : process
@@ -313,7 +334,7 @@ begin
     end loop;
     toc := now;
 
-    check_equal((toc - tic) / C_CLK_PERIOD, G_N_CLKS_SCLK_TO_SCS, "The time difference between the last SCLK edge and SCS inactive is not correct.");
+    check_equal((toc - tic) / C_CLK_PERIOD, n_clks_sclk_to_scs, "The time difference between the last SCLK edge and SCS inactive is not correct.");
   end process;
 
   p_check_time_sclk : process

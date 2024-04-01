@@ -119,6 +119,17 @@ for n_clks in [1, 2, 3, 4]:
         },
     )
 
+test = tb.test("08_max_n_clks_sclk_to_scs")
+counter = 0
+for n_clks in [1, 2, 3, 4]:
+    counter += 1
+    test.add_config(
+        name=f"c{counter}.max_n_clks_sclk_to_scs={n_clks}",
+        generics={
+            "G_MAX_N_CLKS_SCLK_TO_SCS": n_clks,
+        },
+    )
+
 waveform_filename = "waveform.tcl"
 generate_waveform_file(waveform_filename)
 
