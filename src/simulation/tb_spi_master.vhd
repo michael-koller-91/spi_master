@@ -21,9 +21,11 @@ entity tb_spi_master is
     G_SCS_IDLE_STATE                          : std_ulogic := '1';
     G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE : std_ulogic := '1';
     G_MAX_N_CLKS_SCS_TO_SCLK                  : positive   := 3;
-    G_MAX_N_CLKS_SCLK_TO_SCS                  : positive   := 4;
+    G_MAX_N_CLKS_SCLK_TO_SCS                  : positive   := 5;
     G_MAX_N_BITS                              : positive   := 4;
-    G_MAX_SCLK_DIVIDE_HALF                    : positive   := 2
+    G_MAX_SCLK_DIVIDE_HALF                    : positive   := 2;
+    G_MAX_N_CLKS_SCLK_TO_LE                   : positive   := 2;
+    G_MAX_N_CLKS_LE_WIDTH                     : positive   := 3
     );
 end entity;
 
@@ -65,29 +67,34 @@ architecture arch of tb_spi_master is
     end if;
   end procedure;
 
-  constant C_CLK_PERIOD : time := 10 ns;
+  constant C_CLK_PERIOD : time       := 10 ns;
+  signal clk            : std_ulogic := '0';
 
-  signal clk                        : std_ulogic                                   := '0';
   signal d_from_peripheral          : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
   signal d_from_peripheral_expected : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
   signal d_to_peripheral            : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
-  signal start                      : std_ulogic                                   := '0';
-  signal ready                      : std_ulogic                                   := '0';
-  signal sclk                       : std_ulogic                                   := '0';
-  signal sd_from_peripheral         : std_ulogic                                   := '0';
-  signal sd_to_peripheral           : std_ulogic                                   := '0';
-  signal scs                        : std_ulogic                                   := '0';
+
+  signal start              : std_ulogic := '0';
+  signal ready              : std_ulogic := '0';
+  signal sclk               : std_ulogic := '0';
+  signal sd_from_peripheral : std_ulogic := '0';
+  signal sd_to_peripheral   : std_ulogic := '0';
+  signal scs                : std_ulogic := '0';
+  signal le                 : std_ulogic := '0';
 
   signal sclk_divide_half   : natural range 1 to G_MAX_SCLK_DIVIDE_HALF   := 1;
   signal n_bits             : natural range 1 to G_MAX_N_BITS             := 1;
   signal n_clks_scs_to_sclk : natural range 1 to G_MAX_N_CLKS_SCS_TO_SCLK := 1;
   signal n_clks_sclk_to_scs : natural range 1 to G_MAX_N_CLKS_SCLK_TO_SCS := 1;
+  signal n_clks_sclk_to_le  : natural range 1 to G_MAX_N_CLKS_SCLK_TO_LE  := 1;
+  signal n_clks_le_width    : natural range 1 to G_MAX_N_CLKS_LE_WIDTH    := 1;
 
   signal sclk_idle_state                         : std_ulogic := G_SCLK_IDLE_STATE;
   signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
-  signal constant_one : std_ulogic := '1';  -- has to be a signal but is constant but the stability checker can't handle it otherwise
+  signal constant_one     : std_ulogic := '1';  -- has to be a signal but is constant but the stability checker can't handle it otherwise
+  signal ready_stable_end : std_ulogic := '0';
 
 begin
 
@@ -96,7 +103,9 @@ begin
       G_MAX_N_CLKS_SCS_TO_SCLK => G_MAX_N_CLKS_SCS_TO_SCLK,
       G_MAX_N_CLKS_SCLK_TO_SCS => G_MAX_N_CLKS_SCLK_TO_SCS,
       G_MAX_N_BITS             => G_MAX_N_BITS,
-      G_MAX_SCLK_DIVIDE_HALF   => G_MAX_SCLK_DIVIDE_HALF
+      G_MAX_SCLK_DIVIDE_HALF   => G_MAX_SCLK_DIVIDE_HALF,
+      G_MAX_N_CLKS_SCLK_TO_LE  => G_MAX_N_CLKS_SCLK_TO_LE,
+      G_MAX_N_CLKS_LE_WIDTH    => G_MAX_N_CLKS_LE_WIDTH
       )
     port map(
       i_clk                                     => clk,
@@ -113,7 +122,10 @@ begin
       i_n_bits_minus_1                          => to_unsigned(n_bits - 1, ceil_log2(G_MAX_N_BITS)),
       i_n_clks_scs_to_sclk_minus_1              => to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(G_MAX_N_CLKS_SCS_TO_SCLK)),
       i_n_clks_sclk_to_scs_minus_1              => to_unsigned(n_clks_sclk_to_scs - 1, ceil_log2(G_MAX_N_CLKS_SCLK_TO_SCS)),
+      i_n_clks_sclk_to_le_minus_1               => to_unsigned(n_clks_sclk_to_le - 1, ceil_log2(G_MAX_N_CLKS_SCLK_TO_LE)),
+      i_n_clks_le_width_minus_1                 => to_unsigned(n_clks_le_width - 1, ceil_log2(G_MAX_N_CLKS_LE_WIDTH)),
       --
+      o_le                                      => le,
       o_scs                                     => scs,
       o_sclk                                    => sclk,
       o_sd_to_peripheral                        => sd_to_peripheral,
@@ -141,6 +153,8 @@ begin
     n_bits                                  <= G_MAX_N_BITS;
     n_clks_scs_to_sclk                      <= G_MAX_N_CLKS_SCS_TO_SCLK;
     n_clks_sclk_to_scs                      <= G_MAX_N_CLKS_SCLK_TO_SCS;
+    n_clks_sclk_to_le                       <= G_MAX_N_CLKS_SCLK_TO_LE;
+    n_clks_le_width                         <= G_MAX_N_CLKS_LE_WIDTH;
     --
     WaitForClock(clk, 1);
     --
@@ -152,6 +166,8 @@ begin
     info("n_bits = " & to_string(n_bits));
     info("n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
     info("n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+    info("n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+    info("n_clks_le_width = " & to_string(n_clks_le_width));
     info("-- end init");
 
     WaitForClock(clk, 10);
@@ -524,10 +540,15 @@ begin
     wait until start = '1';
 
     -- wait until one clock cycle before the ready signal should come
-    wait for C_CLK_PERIOD * n_clks_sclk_to_scs;
+    wait for C_CLK_PERIOD * n_clks_scs_to_sclk;
     wait for C_CLK_PERIOD * (sclk_divide_half * 2 * n_bits - sclk_divide_half) - C_CLK_PERIOD;
 -- minus one cycle to be ready before the ready
-    wait for C_CLK_PERIOD * n_clks_scs_to_sclk;
+    if n_clks_sclk_to_scs > n_clks_sclk_to_le + n_clks_le_width then
+      wait for C_CLK_PERIOD * n_clks_sclk_to_scs;
+    else
+      wait for C_CLK_PERIOD * n_clks_sclk_to_le;
+      wait for C_CLK_PERIOD * n_clks_le_width;
+    end if;
 
     ready_stable_end <= '1';
     WaitForClock(clk, 1);
