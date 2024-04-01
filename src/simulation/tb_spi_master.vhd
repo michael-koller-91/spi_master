@@ -78,28 +78,16 @@ architecture arch of tb_spi_master is
   signal sd_to_peripheral           : std_ulogic                                   := '0';
   signal scs                        : std_ulogic                                   := '0';
 
-  signal n_bits         : natural range 1 to G_MAX_N_BITS                := 1;
-  signal n_bits_minus_1 : unsigned(ceil_log2(G_MAX_N_BITS) - 1 downto 0) := (others => '1');
-
-  signal sclk_divide_half         : natural range 1 to G_MAX_SCLK_DIVIDE_HALF                := 1;
-  signal sclk_divide_half_minus_1 : unsigned(ceil_log2(G_MAX_SCLK_DIVIDE_HALF) - 1 downto 0) := (others => '1');
-
-  signal n_clks_scs_to_sclk         : natural range 1 to G_MAX_N_CLKS_SCS_TO_SCLK                := 1;
-  signal n_clks_scs_to_sclk_minus_1 : unsigned(ceil_log2(G_MAX_N_CLKS_SCS_TO_SCLK) - 1 downto 0) := (others => '1');
-
-  signal n_clks_sclk_to_scs         : natural range 1 to G_MAX_N_CLKS_SCLK_TO_SCS                := 1;
-  signal n_clks_sclk_to_scs_minus_1 : unsigned(ceil_log2(G_MAX_N_CLKS_SCLK_TO_SCS) - 1 downto 0) := (others => '1');
+  signal sclk_divide_half   : natural range 1 to G_MAX_SCLK_DIVIDE_HALF   := 1;
+  signal n_bits             : natural range 1 to G_MAX_N_BITS             := 1;
+  signal n_clks_scs_to_sclk : natural range 1 to G_MAX_N_CLKS_SCS_TO_SCLK := 1;
+  signal n_clks_sclk_to_scs : natural range 1 to G_MAX_N_CLKS_SCLK_TO_SCS := 1;
 
   signal sclk_idle_state                         : std_ulogic := G_SCLK_IDLE_STATE;
   signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
 begin
-
-  sclk_divide_half_minus_1   <= to_unsigned(sclk_divide_half - 1, sclk_divide_half_minus_1'length);
-  n_bits_minus_1             <= to_unsigned(n_bits - 1, n_bits_minus_1'length);
-  n_clks_scs_to_sclk_minus_1 <= to_unsigned(n_clks_scs_to_sclk - 1, n_clks_scs_to_sclk_minus_1'length);
-  n_clks_sclk_to_scs_minus_1 <= to_unsigned(n_clks_sclk_to_scs - 1, n_clks_sclk_to_scs_minus_1'length);
 
   e_dut : entity work.spi_master(arch)
     generic map(
@@ -119,10 +107,10 @@ begin
       i_sclk_idle_state                         => sclk_idle_state,
       i_transmit_on_sclk_edge_toward_idle_state => transmit_on_sclk_edge_toward_idle_state,
       --
-      i_sclk_divide_half_minus_1                => sclk_divide_half_minus_1,
-      i_n_bits_minus_1                          => n_bits_minus_1,
-      i_n_clks_scs_to_sclk_minus_1              => n_clks_scs_to_sclk_minus_1,
-      i_n_clks_sclk_to_scs_minus_1              => n_clks_sclk_to_scs_minus_1,
+      i_sclk_divide_half_minus_1                => to_unsigned(sclk_divide_half - 1, ceil_log2(G_MAX_SCLK_DIVIDE_HALF)),
+      i_n_bits_minus_1                          => to_unsigned(n_bits - 1, ceil_log2(G_MAX_N_BITS)),
+      i_n_clks_scs_to_sclk_minus_1              => to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(G_MAX_N_CLKS_SCS_TO_SCLK)),
+      i_n_clks_sclk_to_scs_minus_1              => to_unsigned(n_clks_sclk_to_scs - 1, ceil_log2(G_MAX_N_CLKS_SCLK_TO_SCS)),
       --
       o_scs                                     => scs,
       o_sclk                                    => sclk,
