@@ -87,6 +87,8 @@ architecture arch of tb_spi_master is
   signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
+  signal constant_one : std_ulogic := '1';  -- has to be a signal but is constant but the stability checker can't handle it otherwise
+
 begin
 
   e_dut : entity work.spi_master(arch)
@@ -511,6 +513,28 @@ begin
     wait until ready = '1';
     check_equal(d_from_peripheral, d_from_peripheral_expected, result("for d_from_peripheral"));
   end process;
+
+  ---------------------------------------------------------------------------
+  -- check ready
+  ---------------------------------------------------------------------------
+
+  p_ready_stable : process
+  begin
+    ready_stable_end <= '0';
+    wait until start = '1';
+
+    -- wait until one clock cycle before the ready signal should come
+    wait for C_CLK_PERIOD * n_clks_sclk_to_scs;
+    wait for C_CLK_PERIOD * (sclk_divide_half * 2 * n_bits - sclk_divide_half) - C_CLK_PERIOD;
+-- minus one cycle to be ready before the ready
+    wait for C_CLK_PERIOD * n_clks_scs_to_sclk;
+
+    ready_stable_end <= '1';
+    WaitForClock(clk, 1);
+    ready_stable_end <= '0';
+  end process;
+
+  check_stable(clock => clk, en => constant_one, start_event => start, end_event => ready_stable_end, expr => ready, msg => "ready was not stable");
 
 end architecture;
 
