@@ -31,23 +31,7 @@ end entity;
 
 architecture arch of tb_spi_master is
 
-  procedure wait_until_scs_active(signal scs : std_ulogic; signal scs_idle_state : std_ulogic) is
-  begin
-    if scs_idle_state = '0' then
-      wait until rising_edge(scs);
-    else
-      wait until falling_edge(scs);
-    end if;
-  end procedure;
-
-  procedure wait_until_scs_inactive(signal scs : std_ulogic; signal scs_idle_state : std_ulogic) is
-  begin
-    if scs_idle_state = '0' then
-      wait until falling_edge(scs);
-    else
-      wait until rising_edge(scs);
-    end if;
-  end procedure;
+  constant C_CLK_PERIOD : time := 10 ns;
 
   procedure wait_until_sclk_edge_away_from_idle(signal sclk : std_ulogic; signal sclk_idle_state : std_ulogic) is
   begin
@@ -67,20 +51,24 @@ architecture arch of tb_spi_master is
     end if;
   end procedure;
 
-  constant C_CLK_PERIOD : time       := 10 ns;
-  signal clk            : std_ulogic := '0';
+  signal clk : std_ulogic := '0';
 
   signal d_from_peripheral          : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
   signal d_from_peripheral_expected : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
   signal d_to_peripheral            : std_ulogic_vector(G_MAX_N_BITS - 1 downto 0) := (others => '0');
 
   signal start              : std_ulogic := '0';
-  signal ready              : std_ulogic := '0';
-  signal sclk               : std_ulogic := '0';
   signal sd_from_peripheral : std_ulogic := '0';
   signal sd_to_peripheral   : std_ulogic := '0';
-  signal scs                : std_ulogic := '0';
-  signal le                 : std_ulogic := '0';
+
+  signal ready           : std_ulogic := '0';
+  signal ready_reference : std_ulogic := '0';
+  signal sclk            : std_ulogic := '0';
+  signal sclk_reference  : std_ulogic := '0';
+  signal scs             : std_ulogic := '0';
+  signal scs_reference   : std_ulogic := '0';
+  signal le              : std_ulogic := '0';
+  signal le_reference    : std_ulogic := '0';
 
   signal sclk_divide_half   : natural range 1 to G_MAX_SCLK_DIVIDE_HALF   := 1;
   signal n_bits             : natural range 1 to G_MAX_N_BITS             := 1;
@@ -292,109 +280,90 @@ begin
   test_runner_watchdog(runner, 10 us);
 
   ---------------------------------------------------------------------------
-  -- check SCLK and SCS timing
+  -- check ready
   ---------------------------------------------------------------------------
 
-  p_check_time_scs_active : process
-    variable tic : time := 0 ns;
-    variable toc : time := 0 ns;
+  p_generate_ready_reference : process
   begin
-    wait until start = '1';
+    wait until rising_edge(start);
+    ready_reference <= '0';
 
-    wait_until_scs_active(scs, scs_idle_state);
-    tic := now;
+    WaitForClock(clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
-    wait_until_scs_inactive(scs, scs_idle_state);
-    toc := now;
+    -- either SCS inactive or LE takes longer
+    if n_clks_sclk_to_scs > n_clks_sclk_to_le + n_clks_le_width then
+      WaitForClock(clk, n_clks_sclk_to_scs);
+    else
+      WaitForClock(clk, n_clks_sclk_to_le + n_clks_le_width);
+    end if;
+    ready_reference <= '1';
 
-    check_equal((toc - tic) / C_CLK_PERIOD, n_clks_scs_to_sclk + n_bits * 2 * sclk_divide_half - sclk_divide_half + n_clks_sclk_to_scs, "The SCS active time is not correct");
+    WaitForClock(clk, 1);
+    ready_reference <= '0';
   end process;
 
-  p_check_time_scs_to_sclk : process
-    variable tic : time := 0 ns;
-    variable toc : time := 0 ns;
+  p_check_ready : process
   begin
-    wait until start = '1';
-
-    wait_until_scs_active(scs, scs_idle_state);
-    tic := now;
-
-    wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
-    toc := now;
-
-    check_equal((toc - tic) / C_CLK_PERIOD, n_clks_scs_to_sclk, "The time difference between SCS active and the first SCLK edge is not correct.");
+    wait on ready, ready_reference;
+    wait for 0 fs;
+    check_equal(ready, ready_reference, "ready is not equal to ready_reference.");
   end process;
 
-  p_check_time_sclk_to_scs : process
-    variable tic : time := 0 ns;
-    variable toc : time := 0 ns;
+  ---------------------------------------------------------------------------
+  -- check SCLK
+  ---------------------------------------------------------------------------
+
+  p_generate_sclk_reference : process
   begin
-    wait until start = '1';
+    wait until rising_edge(start);
+    sclk_reference <= sclk_idle_state;
 
-    wait_until_scs_active(scs, scs_idle_state);
+    wait until falling_edge(start);
+    WaitForClock(clk, n_clks_scs_to_sclk);
+    sclk_reference <= not sclk_reference;
 
-    -- wait for the last SCLK edge before SCS inactive
-    while not scs = scs_idle_state loop
-      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
-      tic := now;
+    for k in 1 to 2 * n_bits - 1 loop
+      WaitForClock(clk, sclk_divide_half);
+      sclk_reference <= not sclk_reference;
     end loop;
-    toc := now;
-
-    check_equal((toc - tic) / C_CLK_PERIOD, n_clks_sclk_to_scs, "The time difference between the last SCLK edge and SCS inactive is not correct.");
   end process;
 
-  p_check_time_sclk : process
-    variable tic            : time    := 0 ns;
-    variable toc            : time    := 0 ns;
-    variable tic_first_edge : time    := 0 ns;
-    variable edge_counter   : integer := 0;
+  p_check_sclk : process
   begin
-    wait until start = '1';
+    wait until falling_edge(start);
 
-    wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
-    edge_counter   := 1;
-    tic_first_edge := now;
-    tic            := now;
-
-    while not scs = scs_idle_state loop
-      wait on sclk, scs;
-      if not scs = scs_idle_state then
-        edge_counter := edge_counter + 1;
-        toc          := now;
-
-        check_equal((toc - tic) / C_CLK_PERIOD, sclk_divide_half, "The time difference between two consecutive SCLK edges is not correct (edge_counter = " & to_string(edge_counter) & ").");
-
-        tic := now;
-      end if;
+    while not rising_edge(ready) loop
+      wait on sclk, sclk_reference;
+      wait for 0 fs;
+      check_equal(sclk, sclk_reference, "sclk is not equal to sclk_reference.");
     end loop;
-
-    check_equal((toc - tic_first_edge) / C_CLK_PERIOD, n_bits * 2 * sclk_divide_half - sclk_divide_half, "The time difference between the first and the last SCLK edges is not correct.");
   end process;
 
   ---------------------------------------------------------------------------
-  -- check SCLK and SCS idle state
+  -- check SCS
   ---------------------------------------------------------------------------
 
-  p_check_sclk_idle_state : process
+  p_generate_scs_reference : process
   begin
-    wait until start = '1';
-    check_equal(sclk, sclk_idle_state, result("for sclk"));
+    wait until rising_edge(start);
+    scs_reference <= scs_idle_state;
 
-    wait until sclk = not sclk_idle_state;
+    wait until falling_edge(start);
+    scs_reference <= not scs_idle_state;
 
-    wait until ready = '1';
-    check_equal(sclk, sclk_idle_state, result("for sclk"));
+    WaitForClock(clk, n_clks_sclk_to_scs + (2 * n_bits - 1) * sclk_divide_half + n_clks_scs_to_sclk);
+    scs_reference <= scs_idle_state;
   end process;
 
-  p_check_scs_idle_state : process
+  p_check_scs : process
   begin
     wait until start = '1';
-    check_equal(scs, scs_idle_state, result("for scs"));
 
-    wait until scs = not scs_idle_state;
-
-    wait until ready = '1';
-    check_equal(scs, scs_idle_state, result("for scs"));
+    while not ready = '1' loop
+      wait on scs, scs_reference;
+      wait for 0 fs;
+      check_equal(scs, scs_reference, "scs is not equal to scs_reference.");
+    end loop;
   end process;
 
   ---------------------------------------------------------------------------
@@ -530,32 +499,4 @@ begin
     check_equal(d_from_peripheral, d_from_peripheral_expected, result("for d_from_peripheral"));
   end process;
 
-  ---------------------------------------------------------------------------
-  -- check ready
-  ---------------------------------------------------------------------------
-
-  p_ready_stable : process
-  begin
-    ready_stable_end <= '0';
-    wait until start = '1';
-
-    -- wait until one clock cycle before the ready signal should come
-    wait for C_CLK_PERIOD * n_clks_scs_to_sclk;
-    wait for C_CLK_PERIOD * (sclk_divide_half * 2 * n_bits - sclk_divide_half) - C_CLK_PERIOD;
--- minus one cycle to be ready before the ready
-    if n_clks_sclk_to_scs > n_clks_sclk_to_le + n_clks_le_width then
-      wait for C_CLK_PERIOD * n_clks_sclk_to_scs;
-    else
-      wait for C_CLK_PERIOD * n_clks_sclk_to_le;
-      wait for C_CLK_PERIOD * n_clks_le_width;
-    end if;
-
-    ready_stable_end <= '1';
-    WaitForClock(clk, 1);
-    ready_stable_end <= '0';
-  end process;
-
-  check_stable(clock => clk, en => constant_one, start_event => start, end_event => ready_stable_end, expr => ready, msg => "ready was not stable");
-
 end architecture;
-
