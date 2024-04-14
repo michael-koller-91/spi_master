@@ -11,7 +11,8 @@ entity spi_master is
     G_CONFIG : t_config := C_DEFAULT_CONFIG
     );
   port (
-    i_clk                           : in  std_ulogic                                          := '0';
+    i_clk                           : in  std_ulogic                                          := '0';  -- system clock
+    --
     i_start                         : in  std_ulogic                                          := '0';
     o_busy                          : out std_ulogic                                          := '0';
     o_ready                         : out std_ulogic                                          := '0';
