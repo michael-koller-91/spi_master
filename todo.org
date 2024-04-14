@@ -1,6 +1,4 @@
 # -*- mode: org -*-
-* TODO a stability checker for the ready signal
-* TODO scs and sclk distances as ports instead of generics
 * TODO timing diagram
-* TODO the settings are sampled with start strobe
-
+* TODO implement a cs keep
+* TODO implement multiple cs
