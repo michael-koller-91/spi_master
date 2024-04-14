@@ -50,6 +50,7 @@ package spi_package is
     scs_idle_state                          : std_ulogic;
     sclk_idle_state                         : std_ulogic;
     transmit_on_sclk_edge_toward_idle_state : std_ulogic;
+    streaming_mode                          : std_ulogic;
     sclk_divide_half_minus_1                : unsigned;
     n_bits_minus_1                          : unsigned;
     n_clks_scs_to_sclk_minus_1              : unsigned;

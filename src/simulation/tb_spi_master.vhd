@@ -63,9 +63,10 @@ architecture arch of tb_spi_master is
 
   signal clk : std_ulogic := '0';
 
-  signal d_from_peripheral          : std_ulogic_vector(C_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
-  signal d_from_peripheral_expected : std_ulogic_vector(C_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
-  signal d_to_peripheral            : std_ulogic_vector(C_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
+  signal d_from_peripheral             : std_ulogic_vector(C_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
+  signal d_from_peripheral_expected    : std_ulogic_vector(C_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
+  signal d_from_peripheral_read_strobe : std_ulogic                                          := '0';
+  signal d_to_peripheral               : std_ulogic_vector(C_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
 
   signal start              : std_ulogic := '0';
   signal sd_from_peripheral : std_ulogic := '0';
@@ -91,8 +92,7 @@ architecture arch of tb_spi_master is
   signal sclk_idle_state                         : std_ulogic := G_SCLK_IDLE_STATE;
   signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
-
-  signal transmit_from_peripheral : event_t := new_event("transmit_from_peripheral");
+  signal streaming_mode                          : std_ulogic := '0';
 
   signal settings : t_settings(
     sclk_divide_half_minus_1 (ceil_log2(C_CONFIG.max_sclk_divide_half) - 1 downto 0),
@@ -109,6 +109,7 @@ begin
   settings.scs_idle_state                          <= scs_idle_state;
   settings.sclk_idle_state                         <= sclk_idle_state;
   settings.transmit_on_sclk_edge_toward_idle_state <= transmit_on_sclk_edge_toward_idle_state;
+  settings.streaming_mode                          <= streaming_mode;
   settings.sclk_divide_half_minus_1                <= to_unsigned(sclk_divide_half - 1, ceil_log2(C_CONFIG.max_sclk_divide_half));
   settings.n_bits_minus_1                          <= to_unsigned(n_bits - 1, ceil_log2(C_CONFIG.max_n_bits));
   settings.n_clks_scs_to_sclk_minus_1              <= to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(C_CONFIG.max_n_clks_scs_to_sclk));
@@ -122,17 +123,21 @@ begin
       G_CONFIG => C_CONFIG
       )
     port map(
-      i_clk                => clk,
-      i_start              => start,
-      o_ready              => ready,
-      o_d_from_peripheral  => d_from_peripheral,
-      i_d_to_peripheral    => d_to_peripheral,
-      i_settings           => settings,
-      o_le                 => le,
-      o_scs                => scs,
-      o_sclk               => sclk,
-      o_sd_to_peripheral   => sd_to_peripheral,
-      i_sd_from_peripheral => sd_from_peripheral
+      i_clk                           => clk,
+      i_start                         => start,
+      o_ready                         => ready,
+      --
+      i_d_to_peripheral               => d_to_peripheral,
+      o_d_from_peripheral             => d_from_peripheral,
+      o_d_from_peripheral_read_strobe => d_from_peripheral_read_strobe,
+      --
+      i_settings                      => settings,
+      --
+      o_le                            => le,
+      o_scs                           => scs,
+      o_sclk                          => sclk,
+      o_sd_to_peripheral              => sd_to_peripheral,
+      i_sd_from_peripheral            => sd_from_peripheral
       );
 
   CreateClock(clk, C_CLK_PERIOD);
@@ -504,7 +509,7 @@ begin
 
   p_check_data_from_peripheral : process
   begin
-    wait until rising_edge(ready);
+    wait until d_from_peripheral_read_strobe = '1';
     check_equal(d_from_peripheral, d_from_peripheral_expected, result("for d_from_peripheral"));
   end process;
 

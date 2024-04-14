@@ -11,14 +11,15 @@ entity spi_master is
     G_CONFIG : t_config := C_DEFAULT_CONFIG
     );
   port (
-    i_clk                : in  std_ulogic                                          := '0';
-    i_start              : in  std_ulogic                                          := '0';
-    o_ready              : out std_ulogic                                          := '0';
+    i_clk                           : in  std_ulogic                                          := '0';
+    i_start                         : in  std_ulogic                                          := '0';
+    o_ready                         : out std_ulogic                                          := '0';
     -- data
-    i_d_to_peripheral    : in  std_ulogic_vector(G_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
-    o_d_from_peripheral  : out std_ulogic_vector(G_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
+    i_d_to_peripheral               : in  std_ulogic_vector(G_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
+    o_d_from_peripheral             : out std_ulogic_vector(G_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
+    o_d_from_peripheral_read_strobe : out std_ulogic                                          := '0';  -- can be used to sample o_d_from_peripheral
     -- settings
-    i_settings           : in  t_settings(
+    i_settings                      : in  t_settings(
       sclk_divide_half_minus_1 (ceil_log2(G_CONFIG.max_sclk_divide_half) - 1 downto 0),
       n_bits_minus_1 (ceil_log2(G_CONFIG.max_n_bits) - 1 downto 0),
       n_clks_scs_to_sclk_minus_1 (ceil_log2(G_CONFIG.max_n_clks_scs_to_sclk) - 1 downto 0),
@@ -28,11 +29,11 @@ entity spi_master is
       n_clks_rx_sample_strobes_delay (ceil_log2(G_CONFIG.max_n_clks_rx_sample_strobes_delay + 1) - 1 downto 0)
       );
     -- SPI signals
-    o_le                 : out std_ulogic                                          := '0';
-    o_scs                : out std_ulogic                                          := '1';
-    o_sclk               : out std_ulogic                                          := '1';
-    o_sd_to_peripheral   : out std_ulogic                                          := '0';
-    i_sd_from_peripheral : in  std_ulogic                                          := '0'
+    o_le                            : out std_ulogic                                          := '0';
+    o_scs                           : out std_ulogic                                          := '1';
+    o_sclk                          : out std_ulogic                                          := '1';
+    o_sd_to_peripheral              : out std_ulogic                                          := '0';
+    i_sd_from_peripheral            : in  std_ulogic                                          := '0'
     );
 end entity;
 
@@ -54,6 +55,7 @@ architecture arch of spi_master is
   signal sclk_edge           : std_ulogic := '0';
   signal sample_sdi          : std_ulogic := '0';
   signal sample_sdi_no_delay : std_ulogic := '0';
+  signal sample_sdi_d        : std_ulogic := '0';
   signal sample_sdo          : std_ulogic := '0';
 
   type t_state is (idle, wait_sclk, trx, wait_scs_and_le_and_sample_sdi);
@@ -93,14 +95,17 @@ begin
     end if;
   end process;
 
-  p_output_data_from_peripheral : process(i_clk)
+  p_delay_sample_sdi : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      if counter_n_sample_sdi = 0 then
-        o_d_from_peripheral <= d_from_peripheral;
-      end if;
+      sample_sdi_d <= sample_sdi;
     end if;
   end process;
+
+  o_d_from_peripheral <= d_from_peripheral;
+
+  o_d_from_peripheral_read_strobe <= sample_sdi_d when counter_n_sample_sdi = 0 else
+                                     '0';
 
   o_le    <= le;
   o_ready <= ready;
@@ -171,10 +176,10 @@ begin
             --    from 2 * n_bits - 1 downto 0
             --    <=> from 2 * (n_bits - 1) + 1 downto 0
             counter_n_sclk_edges       <= to_integer(i_settings.n_bits_minus_1 & '1');
-                                        --
+            --
             counter_n_clks_scs_to_sclk <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
             scs                        <= not i_settings.scs_idle_state;
-                                        --
+            --
             enable_le                  <= '1';
 
             if i_settings.n_clks_scs_to_sclk_minus_1 = 0 then
@@ -212,14 +217,14 @@ begin
   generate_sample_sdi_strobes : if G_CONFIG.max_n_clks_rx_sample_strobes_delay = 0 generate
     sample_sdi <= sample_sdi_no_delay;
   else generate
-    p_delay_sample_strobes : process(i_clk)
+    p_delay_sample_sdi_strobes : process(i_clk)
     begin
       if rising_edge(i_clk) then
         sample_strobes_delay_reg <= sample_strobes_delay_reg(sample_strobes_delay_reg'left - 1 downto sample_strobes_delay_reg'right) & sample_sdi_no_delay;
       end if;
     end process;
 
-    p_multiplex_sample_strobes : process(all)
+    p_multiplex_sample_sdi_strobes : process(all)
     begin
       if n_clks_rx_sample_strobes_delay = 0 then
         sample_sdi <= sample_sdi_no_delay;
