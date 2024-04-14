@@ -13,11 +13,12 @@ entity spi_master is
   port (
     i_clk                           : in  std_ulogic                                          := '0';
     i_start                         : in  std_ulogic                                          := '0';
+    o_busy                          : out std_ulogic                                          := '0';
     o_ready                         : out std_ulogic                                          := '0';
     -- data
     i_d_to_peripheral               : in  std_ulogic_vector(G_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
     o_d_from_peripheral             : out std_ulogic_vector(G_CONFIG.max_n_bits - 1 downto 0) := (others => '0');
-    o_d_from_peripheral_read_strobe : out std_ulogic                                          := '0';  -- can be used to sample o_d_from_peripheral
+    o_d_from_peripheral_read_strobe : out std_ulogic                                          := '0';  -- use this to sample o_d_from_peripheral
     -- settings
     i_settings                      : in  t_settings(
       sclk_divide_half_minus_1 (ceil_log2(G_CONFIG.max_sclk_divide_half) - 1 downto 0),
@@ -64,6 +65,8 @@ architecture arch of spi_master is
   signal le        : std_ulogic := '0';
   signal enable_le : std_ulogic := '0';
 
+  signal start      : std_ulogic := '0';
+  signal busy       : std_ulogic := '0';
   signal ready      : std_ulogic := '0';
   signal reset_sclk : std_ulogic := '1';
 
@@ -81,10 +84,13 @@ architecture arch of spi_master is
 
 begin
 
+  -- block start if busy
+  start <= i_start and not busy;
+
   p_sample_settings : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      if i_start = '1' then
+      if start = '1' then
         transmit_on_sclk_edge_toward_idle_state <= i_settings.transmit_on_sclk_edge_toward_idle_state;
         sclk_divide_half_minus_1                <= to_integer(i_settings.sclk_divide_half_minus_1);
         n_clks_sclk_to_scs_minus_1              <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
@@ -107,10 +113,12 @@ begin
   o_d_from_peripheral_read_strobe <= sample_sdi_d when counter_n_sample_sdi = 0 else
                                      '0';
 
-  o_le    <= le;
+  o_busy  <= busy;
   o_ready <= ready;
-  o_sclk  <= sclk;
-  o_scs   <= scs;
+
+  o_sclk <= sclk;
+  o_scs  <= scs;
+  o_le   <= le;
 
   p_fsm : process(i_clk)
   begin
@@ -169,9 +177,10 @@ begin
           end if;
 
         when others =>                  -- idle
+          busy  <= '0';
           ready <= '0';
           scs   <= i_settings.scs_idle_state;  -- make in-port change visible at out-port without the need of a start strobe
-          if i_start = '1' then
+          if start = '1' then
             -- `counter_n_sclk_edges` counts 2 * n_bits sclk edges:
             --    from 2 * n_bits - 1 downto 0
             --    <=> from 2 * (n_bits - 1) + 1 downto 0
@@ -181,6 +190,8 @@ begin
             scs                        <= not i_settings.scs_idle_state;
             --
             enable_le                  <= '1';
+            --
+            busy                       <= '1';
 
             if i_settings.n_clks_scs_to_sclk_minus_1 = 0 then
               reset_sclk <= '0';
@@ -237,7 +248,7 @@ begin
   p_count_sample_sdi_strobes : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      if i_start = '1' then
+      if start = '1' then
         counter_n_sample_sdi <= to_integer(i_settings.n_bits_minus_1) + 1;
       else
         if sample_sdi = '1' then
@@ -280,7 +291,7 @@ begin
   p_transmit_to_peripheral : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      if i_start = '1' then
+      if start = '1' then
         d_to_peripheral <= i_d_to_peripheral;
       else
         o_sd_to_peripheral <= d_to_peripheral(0);

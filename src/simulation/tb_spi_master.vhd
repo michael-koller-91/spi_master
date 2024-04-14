@@ -72,6 +72,7 @@ architecture arch of tb_spi_master is
   signal sd_from_peripheral : std_ulogic := '0';
   signal sd_to_peripheral   : std_ulogic := '0';
 
+  signal busy            : std_ulogic := '0';
   signal ready           : std_ulogic := '0';
   signal ready_reference : std_ulogic := '0';
   signal sclk            : std_ulogic := '0';
@@ -125,6 +126,7 @@ begin
     port map(
       i_clk                           => clk,
       i_start                         => start,
+      o_busy                          => busy,
       o_ready                         => ready,
       --
       i_d_to_peripheral               => d_to_peripheral,
