@@ -353,7 +353,7 @@ begin
     else
       n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
     end if;
-    n_wait := maximum(n_wait, n_wait_sample_sdi);
+    n_wait := maximum(n_wait, n_wait_sample_sdi + 2); -- +1 for sampling +1 for ready
 
     WaitForClock(clk, n_wait);
     ready_reference <= '1';
@@ -471,24 +471,26 @@ begin
     end loop;
   end process;
 
-  p_generate_sd_data_from_peripheral : process
+  p_generate_sd_from_peripheral : process
   begin
     wait until start = '1';
 
     sd_from_peripheral <= '0';
 
-    for n in n_bits - 1 downto 0 loop
-      if transmit_on_sclk_edge_toward_idle_state = '1' then  -- receive on sclk away from idle state
-        wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
-      else
-        wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
-      end if;
+    if transmit_on_sclk_edge_toward_idle_state = '1' then  -- receive on sclk away from idle state
+      wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
+    else
+      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
+    end if;
+    WaitForClock(clk, n_clks_rx_sample_strobes_delay);
 
-      WaitForClock(clk, n_clks_rx_sample_strobes_delay);
+    for n in n_bits - 1 downto 0 loop
       sd_from_peripheral <= d_from_peripheral_expected(n);
 
       WaitForClock(clk, 1);
       sd_from_peripheral <= '0';
+
+      WaitForClock(clk, 2 * sclk_divide_half - 1);
     end loop;
   end process;
 

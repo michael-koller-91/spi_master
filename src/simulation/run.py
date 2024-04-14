@@ -132,7 +132,7 @@ for n_clks in [1, 2, 3, 4]:
 
 test = tb.test("09_max_n_clks_rx_sample_strobes_delay")
 counter = 0
-for n_clks in [0, 1, 2, 3]:
+for n_clks in [0, 1, 2, 3, 10]:
     counter += 1
     test.add_config(
         name=f"c{counter}.max_n_clks_rx_sample_strobes_delay={n_clks}",

@@ -61,10 +61,11 @@ architecture arch of spi_master is
   type t_state is (idle, wait_sclk, trx, wait_scs_and_le_and_sample_sdi);
   signal state : t_state := idle;
 
-  signal le : std_ulogic := '0';
+  signal le        : std_ulogic := '0';
+  signal enable_le : std_ulogic := '0';
 
-  signal ready          : std_ulogic := '0';
-  signal reset_sclk     : std_ulogic := '1';
+  signal ready      : std_ulogic := '0';
+  signal reset_sclk : std_ulogic := '1';
 
   -- sampled settings
   signal sclk_divide_half_minus_1                : natural range 0 to G_CONFIG.max_sclk_divide_half - 1           := 0;
@@ -142,10 +143,13 @@ begin
             counter_n_clks_sclk_to_scs <= counter_n_clks_sclk_to_scs - 1;
           end if;
 
+          if enable_le = '1' then
           if counter_n_clks_sclk_to_le = 0 then
-            le <= '1';
+            le        <= '1';
+            enable_le <= '0';
           else
             counter_n_clks_sclk_to_le <= counter_n_clks_sclk_to_le - 1;
+          end if;
           end if;
 
           if le = '1' then
@@ -172,6 +176,8 @@ begin
             --
             counter_n_clks_scs_to_sclk <= to_integer(i_n_clks_scs_to_sclk_minus_1);
             scs                        <= not i_scs_idle_state;
+            --
+            enable_le                  <= '1';
 
             if i_n_clks_scs_to_sclk_minus_1 = 0 then
               reset_sclk <= '0';
