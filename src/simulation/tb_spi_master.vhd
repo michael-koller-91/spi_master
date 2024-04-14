@@ -92,6 +92,8 @@ architecture arch of tb_spi_master is
   signal scs_idle_state                          : std_ulogic := G_SCS_IDLE_STATE;
   signal transmit_on_sclk_edge_toward_idle_state : std_ulogic := G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE;
 
+  signal transmit_from_peripheral : event_t := new_event("transmit_from_peripheral");
+
 begin
 
   e_dut : entity work.spi_master(arch)
@@ -234,6 +236,21 @@ begin
           WaitForClock(clk, 5);
         end loop;
       elsif run("06_receive") then
+        info("deterministic");
+        for k in 1 to 20 loop
+          d_from_peripheral_expected <= (others => '1');
+          WaitForClock(clk, 1);
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          wait until ready = '1';
+
+          WaitForClock(clk, 5);
+        end loop;
+
+        info("random");
         for k in 1 to 20 loop
           d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
           WaitForClock(clk, 1);
@@ -274,6 +291,34 @@ begin
 
           WaitForClock(clk, 5);
         end loop;
+      elsif run("09_max_n_clks_rx_sample_strobes_delay") then
+        info("deterministic");
+        for clks_rx_sample_strobes_delay in 0 to C_CONFIG.max_n_clks_rx_sample_strobes_delay loop
+          d_from_peripheral_expected <= (others => '1');
+          WaitForClock(clk, 1);
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          wait until ready = '1';
+
+          WaitForClock(clk, 5);
+        end loop;
+
+        info("random");
+        for clks_rx_sample_strobes_delay in 0 to C_CONFIG.max_n_clks_rx_sample_strobes_delay loop
+          d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
+          WaitForClock(clk, 1);
+
+          start <= '1';
+          WaitForClock(clk, 1);
+          start <= '0';
+
+          wait until ready = '1';
+
+          WaitForClock(clk, 5);
+        end loop;
       end if;
     end loop;
 
@@ -283,7 +328,7 @@ begin
     wait;
   end process;
 
-  test_runner_watchdog(runner, 10 us);
+  test_runner_watchdog(runner, 20 us);
 
   ---------------------------------------------------------------------------
   -- check ready
@@ -373,103 +418,6 @@ begin
   end process;
 
   ---------------------------------------------------------------------------
-  -- check sample strobes
-  ---------------------------------------------------------------------------
-
-  p_check_sample_strobe_sdi_happens : process
-    alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
-  begin
-    wait until start = '1';
-
-    if transmit_on_sclk_edge_toward_idle_state then
-      wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
-    else
-      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
-    end if;
-
-  --check_equal(sample_sdi, '1', result("for sample_sdi"));
-  --WaitForClock(clk, 1);
-  --check_equal(sample_sdi, '1', result("for sample_sdi"));
-  --WaitForClock(clk, 1);
-  --check_equal(sample_sdi, '0', result("for sample_sdi"));
-  end process;
-
-  p_check_sample_strobe_sdo_happens : process
-    alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
-  begin
-    wait until start = '1';
-
-    if transmit_on_sclk_edge_toward_idle_state then
-      wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
-    else
-      wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
-    end if;
-
-    check_equal(sample_sdo, '1', result("for sample_sdo"));
-    WaitForClock(clk, 1);
-    check_equal(sample_sdo, '1', result("for sample_sdo"));
-    WaitForClock(clk, 1);
-    check_equal(sample_sdo, '0', result("for sample_sdo"));
-  end process;
-
-  p_check_sample_strobe_sdi_count : process
-    alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
-    variable count                                 : integer := 0;
-  begin
-    wait until start = '1';
-
-    count := 0;
-    while not ready = '1' loop
-      wait until rising_edge(sample_sdi);
-      count := count + 1;
-    end loop;
-    check_equal(count, n_bits, result("for sample_sdi count"));
-  end process;
-
-  p_check_sample_strobe_sdo_count : process
-    alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
-    variable count                                 : integer := 0;
-  begin
-    wait until start = '1';
-
-    count := 0;
-    while not ready = '1' loop
-      wait until rising_edge(sample_sdo);
-      count := count + 1;
-    end loop;
-    check_equal(count, n_bits, result("for sample_sdo count"));
-  end process;
-
-  p_check_sample_strobe_edge : process
-    alias sample_sdi is << signal e_dut.sample_sdi : std_ulogic >>;
-    alias sample_sdo is << signal e_dut.sample_sdo : std_ulogic >>;
-  begin
-    wait until start = '1';
-
-    while not ready = '1' loop
-      -- the edge away from the idle state is always the first edge
-      wait on sclk;
-      if transmit_on_sclk_edge_toward_idle_state = '1' then
-        check_equal(sample_sdi, '1', result("for sample_sdi"));
-        check_equal(sample_sdo, '0', result("for sample_sdo"));
-      else
-        check_equal(sample_sdi, '0', result("for sample_sdi"));
-        check_equal(sample_sdo, '1', result("for sample_sdo"));
-      end if;
-
-      -- the edge toward the idle state is always the second edge
-      wait on sclk;
-      if transmit_on_sclk_edge_toward_idle_state = '1' then
-        check_equal(sample_sdi, '0', result("for sample_sdi"));
-        check_equal(sample_sdo, '1', result("for sample_sdo"));
-      else
-        check_equal(sample_sdi, '1', result("for sample_sdi"));
-        check_equal(sample_sdo, '0', result("for sample_sdo"));
-      end if;
-    end loop;
-  end process;
-
-  ---------------------------------------------------------------------------
   -- check data
   ---------------------------------------------------------------------------
 
@@ -487,21 +435,30 @@ begin
     end loop;
   end process;
 
-  p_check_data_from_peripheral : process
+  p_generate_sd_data_from_peripheral : process
   begin
     wait until start = '1';
 
+    sd_from_peripheral <= '0';
+
     for n in n_bits - 1 downto 0 loop
-      sd_from_peripheral <= d_from_peripheral_expected(n);
-      if transmit_on_sclk_edge_toward_idle_state = '1' then
+      if transmit_on_sclk_edge_toward_idle_state = '1' then  -- receive on sclk away from idle state
         wait_until_sclk_edge_away_from_idle(sclk, sclk_idle_state);
       else
         wait_until_sclk_edge_toward_idle(sclk, sclk_idle_state);
       end if;
-      WaitForClock(clk, 1);
-    end loop;
 
-    wait until ready = '1';
+      WaitForClock(clk, n_clks_rx_sample_strobes_delay);
+      sd_from_peripheral <= d_from_peripheral_expected(n);
+
+      WaitForClock(clk, 1);
+      sd_from_peripheral <= '0';
+    end loop;
+  end process;
+
+  p_check_data_from_peripheral : process
+  begin
+    wait until rising_edge(ready);
     check_equal(d_from_peripheral, d_from_peripheral_expected, result("for d_from_peripheral"));
   end process;
 
