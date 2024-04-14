@@ -94,38 +94,46 @@ architecture arch of tb_spi_master is
 
   signal transmit_from_peripheral : event_t := new_event("transmit_from_peripheral");
 
+  signal settings : t_settings(
+    sclk_divide_half_minus_1 (ceil_log2(C_CONFIG.max_sclk_divide_half) - 1 downto 0),
+    n_bits_minus_1 (ceil_log2(C_CONFIG.max_n_bits) - 1 downto 0),
+    n_clks_scs_to_sclk_minus_1 (ceil_log2(C_CONFIG.max_n_clks_scs_to_sclk) - 1 downto 0),
+    n_clks_sclk_to_scs_minus_1 (ceil_log2(C_CONFIG.max_n_clks_sclk_to_scs) - 1 downto 0),
+    n_clks_sclk_to_le_minus_1 (ceil_log2(C_CONFIG.max_n_clks_sclk_to_le) - 1 downto 0),
+    n_clks_le_width_minus_1 (ceil_log2(C_CONFIG.max_n_clks_le_width) - 1 downto 0),
+    n_clks_rx_sample_strobes_delay (ceil_log2(C_CONFIG.max_n_clks_rx_sample_strobes_delay + 1) - 1 downto 0)
+    );
+
 begin
+
+  settings.scs_idle_state                          <= scs_idle_state;
+  settings.sclk_idle_state                         <= sclk_idle_state;
+  settings.transmit_on_sclk_edge_toward_idle_state <= transmit_on_sclk_edge_toward_idle_state;
+  settings.sclk_divide_half_minus_1                <= to_unsigned(sclk_divide_half - 1, ceil_log2(C_CONFIG.max_sclk_divide_half));
+  settings.n_bits_minus_1                          <= to_unsigned(n_bits - 1, ceil_log2(C_CONFIG.max_n_bits));
+  settings.n_clks_scs_to_sclk_minus_1              <= to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(C_CONFIG.max_n_clks_scs_to_sclk));
+  settings.n_clks_sclk_to_scs_minus_1              <= to_unsigned(n_clks_sclk_to_scs - 1, ceil_log2(C_CONFIG.max_n_clks_sclk_to_scs));
+  settings.n_clks_sclk_to_le_minus_1               <= to_unsigned(n_clks_sclk_to_le - 1, ceil_log2(C_CONFIG.max_n_clks_sclk_to_le));
+  settings.n_clks_le_width_minus_1                 <= to_unsigned(n_clks_le_width - 1, ceil_log2(C_CONFIG.max_n_clks_le_width));
+  settings.n_clks_rx_sample_strobes_delay          <= to_unsigned(n_clks_rx_sample_strobes_delay, ceil_log2(C_CONFIG.max_n_clks_rx_sample_strobes_delay + 1));
 
   e_dut : entity work.spi_master(arch)
     generic map(
       G_CONFIG => C_CONFIG
       )
     port map(
-      i_clk                                     => clk,
-      i_start                                   => start,
-      o_ready                                   => ready,
-      o_d_from_peripheral                       => d_from_peripheral,
-      i_d_to_peripheral                         => d_to_peripheral,
-      --
-      i_scs_idle_state                          => scs_idle_state,
-      i_sclk_idle_state                         => sclk_idle_state,
-      i_transmit_on_sclk_edge_toward_idle_state => transmit_on_sclk_edge_toward_idle_state,
-      --
-      i_sclk_divide_half_minus_1                => to_unsigned(sclk_divide_half - 1, ceil_log2(C_CONFIG.max_sclk_divide_half)),
-      i_n_bits_minus_1                          => to_unsigned(n_bits - 1, ceil_log2(C_CONFIG.max_n_bits)),
-      i_n_clks_scs_to_sclk_minus_1              => to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(C_CONFIG.max_n_clks_scs_to_sclk)),
-      i_n_clks_sclk_to_scs_minus_1              => to_unsigned(n_clks_sclk_to_scs - 1, ceil_log2(C_CONFIG.max_n_clks_sclk_to_scs)),
-      i_n_clks_sclk_to_le_minus_1               => to_unsigned(n_clks_sclk_to_le - 1, ceil_log2(C_CONFIG.max_n_clks_sclk_to_le)),
-      i_n_clks_le_width_minus_1                 => to_unsigned(n_clks_le_width - 1, ceil_log2(C_CONFIG.max_n_clks_le_width)),
-      i_n_clks_rx_sample_strobes_delay          => to_unsigned(n_clks_rx_sample_strobes_delay, ceil_log2(C_CONFIG.max_n_clks_rx_sample_strobes_delay + 1)),
-      --
-      o_le                                      => le,
-      o_scs                                     => scs,
-      o_sclk                                    => sclk,
-      o_sd_to_peripheral                        => sd_to_peripheral,
-      i_sd_from_peripheral                      => sd_from_peripheral
+      i_clk                => clk,
+      i_start              => start,
+      o_ready              => ready,
+      o_d_from_peripheral  => d_from_peripheral,
+      i_d_to_peripheral    => d_to_peripheral,
+      i_settings           => settings,
+      o_le                 => le,
+      o_scs                => scs,
+      o_sclk               => sclk,
+      o_sd_to_peripheral   => sd_to_peripheral,
+      i_sd_from_peripheral => sd_from_peripheral
       );
-
 
   CreateClock(clk, C_CLK_PERIOD);
 
@@ -353,7 +361,7 @@ begin
     else
       n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
     end if;
-    n_wait := maximum(n_wait, n_wait_sample_sdi + 2); -- +1 for sampling +1 for ready
+    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);  -- +1 for sampling +1 for ready
 
     WaitForClock(clk, n_wait);
     ready_reference <= '1';

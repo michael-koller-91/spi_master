@@ -1,5 +1,7 @@
 library ieee;
 use ieee.math_real.all;
+use ieee.numeric_std.all;
+use ieee.std_logic_1164.all;
 
 package spi_package is
 
@@ -43,6 +45,19 @@ package spi_package is
     max_n_clks_le_width                => 1,
     max_n_clks_rx_sample_strobes_delay => 0
     );
+
+  type t_settings is record
+    scs_idle_state                          : std_ulogic;
+    sclk_idle_state                         : std_ulogic;
+    transmit_on_sclk_edge_toward_idle_state : std_ulogic;
+    sclk_divide_half_minus_1                : unsigned;
+    n_bits_minus_1                          : unsigned;
+    n_clks_scs_to_sclk_minus_1              : unsigned;
+    n_clks_sclk_to_scs_minus_1              : unsigned;
+    n_clks_sclk_to_le_minus_1               : unsigned;
+    n_clks_le_width_minus_1                 : unsigned;
+    n_clks_rx_sample_strobes_delay          : unsigned;
+  end record t_settings;
 
   -- How many bits are needed to represent `value` values?
   function ceil_log2(value : in positive)
