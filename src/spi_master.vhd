@@ -46,6 +46,7 @@ architecture arch of spi_master is
   signal counter_n_clks_scs_to_sclk : natural range 0 to G_CONFIG.max_n_clks_scs_to_sclk - 1 := G_CONFIG.max_n_clks_scs_to_sclk - 1;
   signal counter_n_clks_sclk_to_le  : natural range 0 to G_CONFIG.max_n_clks_sclk_to_le - 1  := G_CONFIG.max_n_clks_sclk_to_le - 1;
   signal counter_n_clks_le_width    : natural range 0 to G_CONFIG.max_n_clks_le_width - 1    := G_CONFIG.max_n_clks_le_width - 1;
+  signal counter_n_sample_sdi       : natural range 0 to G_CONFIG.max_n_bits                 := G_CONFIG.max_n_bits;
 
   signal sample_strobes_delay_reg : std_ulogic_vector(G_CONFIG.max_n_clks_rx_sample_strobes_delay downto 1) := (others => '0');
 
@@ -57,14 +58,13 @@ architecture arch of spi_master is
   signal sample_sdi_no_delay : std_ulogic := '0';
   signal sample_sdo          : std_ulogic := '0';
 
-  type t_state is (idle, wait_sclk, trx, wait_scs_and_le);
+  type t_state is (idle, wait_sclk, trx, wait_scs_and_le_and_sample_sdi);
   signal state : t_state := idle;
 
   signal le : std_ulogic := '0';
 
   signal ready          : std_ulogic := '0';
   signal reset_sclk     : std_ulogic := '1';
-  signal reset_sclk_old : std_ulogic := '1';
 
   -- sampled settings
   signal sclk_divide_half_minus_1                : natural range 0 to G_CONFIG.max_sclk_divide_half - 1           := 0;
@@ -97,9 +97,7 @@ begin
   p_output_data_from_peripheral : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      -- hold output stable when SCLK stops (so it can be sampled with o_ready)
-      reset_sclk_old <= reset_sclk;
-      if reset_sclk_old = '0' and reset_sclk = '1' then
+      if counter_n_sample_sdi = 0 then
         o_d_from_peripheral <= d_from_peripheral;
       end if;
     end if;
@@ -126,7 +124,7 @@ begin
           if counter_n_sclk_edges = 0 then
             if counter_clk_divide = 0 then
               reset_sclk                 <= '1';
-              state                      <= wait_scs_and_le;
+              state                      <= wait_scs_and_le_and_sample_sdi;
               counter_n_clks_sclk_to_scs <= n_clks_sclk_to_scs_minus_1;
               counter_n_clks_sclk_to_le  <= n_clks_sclk_to_le_minus_1;
               counter_n_clks_le_width    <= n_clks_le_width_minus_1;
@@ -137,7 +135,7 @@ begin
             end if;
           end if;
 
-        when wait_scs_and_le =>
+        when wait_scs_and_le_and_sample_sdi =>
           if counter_n_clks_sclk_to_scs = 0 then
             scs <= i_scs_idle_state;
           else
@@ -158,7 +156,7 @@ begin
             end if;
           end if;
 
-          if counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 then
+          if counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0 then
             ready <= '1';
             state <= idle;
           end if;
@@ -207,7 +205,7 @@ begin
     end if;
   end process;
 
-  generate_sample_strobes : if G_CONFIG.max_n_clks_rx_sample_strobes_delay = 0 generate
+  generate_sample_sdi_strobes : if G_CONFIG.max_n_clks_rx_sample_strobes_delay = 0 generate
     sample_sdi <= sample_sdi_no_delay;
   else generate
     p_delay_sample_strobes : process(i_clk)
@@ -226,6 +224,19 @@ begin
       end if;
     end process;
   end generate;
+
+  p_count_sample_sdi_strobes : process(i_clk)
+  begin
+    if rising_edge(i_clk) then
+      if i_start = '1' then
+        counter_n_sample_sdi <= to_integer(i_n_bits_minus_1) + 1;
+      else
+        if sample_sdi = '1' then
+          counter_n_sample_sdi <= counter_n_sample_sdi - 1;
+        end if;
+      end if;
+    end if;
+  end process;
 
   p_generate_sclk : process(i_clk)
   begin
