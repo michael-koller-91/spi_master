@@ -335,18 +335,27 @@ begin
   ---------------------------------------------------------------------------
 
   p_generate_ready_reference : process
+    variable n_wait            : integer := 0;
+    variable n_wait_sample_sdi : integer := 0;
   begin
     wait until rising_edge(start);
     ready_reference <= '0';
 
+    -- wait until SCLK stops
     WaitForClock(clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
-    -- either SCS inactive or LE takes longer
-    if n_clks_sclk_to_scs > n_clks_sclk_to_le + n_clks_le_width then
-      WaitForClock(clk, n_clks_sclk_to_scs);
+    -- wait until SCS and LE are ready
+    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);  -- either SCS inactive or LE takes longer
+
+    -- wait until the last sample has been sampled
+    if transmit_on_sclk_edge_toward_idle_state = '1' then  -- receive on sclk away from idle state
+      n_wait_sample_sdi := n_clks_rx_sample_strobes_delay - sclk_divide_half;
     else
-      WaitForClock(clk, n_clks_sclk_to_le + n_clks_le_width);
+      n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
     end if;
+    n_wait := maximum(n_wait, n_wait_sample_sdi);
+
+    WaitForClock(clk, n_wait);
     ready_reference <= '1';
 
     WaitForClock(clk, 1);
@@ -402,7 +411,7 @@ begin
     wait until falling_edge(start);
     scs_reference <= not scs_idle_state;
 
-    WaitForClock(clk, n_clks_sclk_to_scs + (2 * n_bits - 1) * sclk_divide_half + n_clks_scs_to_sclk);
+    WaitForClock(clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_scs);
     scs_reference <= scs_idle_state;
   end process;
 
@@ -414,6 +423,33 @@ begin
       wait on scs, scs_reference;
       wait for 0 fs;
       check_equal(scs, scs_reference, "scs is not equal to scs_reference.");
+    end loop;
+  end process;
+
+  ---------------------------------------------------------------------------
+  -- check LE
+  ---------------------------------------------------------------------------
+
+  p_generate_le_reference : process
+  begin
+    wait until falling_edge(start);
+    le_reference <= '0';
+
+    WaitForClock(clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_le);
+    le_reference <= '1';
+
+    WaitForClock(clk, n_clks_le_width);
+    le_reference <= '0';
+  end process;
+
+  p_check_le : process
+  begin
+    wait until start = '1';
+
+    while not ready = '1' loop
+      wait on le, le_reference;
+      wait for 0 fs;
+      check_equal(le, le_reference, "le is not equal to le_reference.");
     end loop;
   end process;
 
