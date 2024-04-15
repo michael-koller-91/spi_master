@@ -111,6 +111,9 @@ begin
     end if;
   end process;
 
+  keep_streaming    <= i_keep_streaming;
+  o_streaming_start <= streaming_start;
+
   p_delay_sample_sdi : process(i_clk)
   begin
     if rising_edge(i_clk) then
@@ -146,8 +149,9 @@ begin
           streaming_start <= '0';
           if counter_n_sclk_edges = 0 then
             if counter_clk_divide = 0 then
-              streaming_start <= '1';
-              if streaming_mode = '0' then
+              streaming_start      <= '1';
+              counter_n_sclk_edges <= to_integer(i_settings.n_bits_minus_1 & '1');
+              if not(streaming_mode = '1' and keep_streaming = '1') then
                 reset_sclk <= '1';
                 state      <= wait_scs_and_le_and_sample_sdi;
               end if;
@@ -262,7 +266,7 @@ begin
   p_count_sample_sdi_strobes : process(i_clk)
   begin
     if rising_edge(i_clk) then
-      if start = '1' then
+      if start = '1' or streaming_start = '1' then
         counter_n_sample_sdi <= to_integer(i_settings.n_bits_minus_1) + 1;
       else
         if sample_sdi = '1' then

@@ -338,7 +338,22 @@ begin
           wait until ready = '1';
 
           WaitForClock(clk, 5);
+
         end loop;
+      elsif run("10_streaming_mode") then
+        streaming_mode <= '1';
+        keep_streaming <= '1';
+
+        WaitForClock(clk, 1);
+
+        start <= '1';
+        WaitForClock(clk, 1);
+        start <= '0';
+
+        WaitForClock(clk, 100);
+        keep_streaming <= '0';
+
+        WaitForClock(clk, 100);
       end if;
     end loop;
 
@@ -386,7 +401,9 @@ begin
   begin
     wait on ready, ready_reference;
     wait for 0 fs;
-    check_equal(ready, ready_reference, "ready is not equal to ready_reference.");
+    if streaming_mode = '0' then
+      check_equal(ready, ready_reference, "ready is not equal to ready_reference.");
+    end if;
   end process;
 
   ---------------------------------------------------------------------------
@@ -415,7 +432,9 @@ begin
     while not rising_edge(ready) loop
       wait on sclk, sclk_reference;
       wait for 0 fs;
-      check_equal(sclk, sclk_reference, "sclk is not equal to sclk_reference.");
+      if streaming_mode = '0' then
+        check_equal(sclk, sclk_reference, "sclk is not equal to sclk_reference.");
+      end if;
     end loop;
   end process;
 
@@ -442,7 +461,9 @@ begin
     while not ready = '1' loop
       wait on scs, scs_reference;
       wait for 0 fs;
-      check_equal(scs, scs_reference, "scs is not equal to scs_reference.");
+      if streaming_mode = '0' then
+        check_equal(scs, scs_reference, "scs is not equal to scs_reference.");
+      end if;
     end loop;
   end process;
 
@@ -469,7 +490,9 @@ begin
     while not ready = '1' loop
       wait on le, le_reference;
       wait for 0 fs;
-      check_equal(le, le_reference, "le is not equal to le_reference.");
+      if streaming_mode = '0' then
+        check_equal(le, le_reference, "le is not equal to le_reference.");
+      end if;
     end loop;
   end process;
 
