@@ -5,7 +5,7 @@
 
     inputs = {
         nixpkgs.url = "github:nixos/nixpkgs/23.11";
-        nvc.url = path:./packages/nvc;
+        nvc.url = "github:michael-koller-91/.dotfiles/main?dir=packages/nvc";
     };
 
     outputs = { self, nixpkgs, nvc }:
