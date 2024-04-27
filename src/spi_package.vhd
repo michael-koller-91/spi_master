@@ -1,7 +1,7 @@
 library ieee;
-use ieee.math_real.all;
-use ieee.numeric_std.all;
-use ieee.std_logic_1164.all;
+  use ieee.math_real.all;
+  use ieee.numeric_std.all;
+  use ieee.std_logic_1164.all;
 
 package spi_package is
 
@@ -36,7 +36,8 @@ package spi_package is
     max_n_clks_rx_sample_strobes_delay : natural;
   end record t_config;
 
-  constant C_DEFAULT_CONFIG : t_config := (
+  constant c_default_config : t_config :=
+  (
     max_n_clks_scs_to_sclk             => 1,
     max_n_clks_sclk_to_scs             => 1,
     max_n_bits                         => 1,
@@ -44,11 +45,11 @@ package spi_package is
     max_n_clks_sclk_to_le              => 1,
     max_n_clks_le_width                => 1,
     max_n_clks_rx_sample_strobes_delay => 0
-    );
+  );
 
   type t_settings is record
     -- The idle value of SCS.
-    scs_idle_state  : std_ulogic;
+    scs_idle_state : std_ulogic;
 
     -- The idle value of SCLK.
     sclk_idle_state : std_ulogic;
@@ -90,17 +91,24 @@ package spi_package is
   end record t_settings;
 
   -- How many bits are needed to represent `value` values?
-  function ceil_log2(value : in positive)
+
+  function ceil_log2 (
+    value : in positive
+  )
     return positive;
 
 end package spi_package;
 
 package body spi_package is
 
-  function ceil_log2(value : in positive)
+  function ceil_log2 (
+    value : in positive
+  )
     return positive is
   begin
+
     return positive(realmax(ceil(log2(real(value))), 1.0));
-  end;
+
+  end function;
 
 end package body spi_package;
