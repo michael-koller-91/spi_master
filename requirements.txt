@@ -7,5 +7,7 @@ mypy-extensions==1.0.0
 packaging==24.0
 pathspec==0.12.1
 platformdirs==3.10.0
+PyYAML==6.0.1
 virtualenv==20.24.5
+vsg==3.23.0
 vunit_hdl==4.7.0
