@@ -46,11 +46,11 @@ vu = VUnit.from_argv(compile_builtins=False)
 vu.add_vhdl_builtins()
 vu.add_osvvm()
 
-work = vu.add_library("spi_master")
-work.add_source_files(Path(__file__).parent / "*.vhd")
-work.add_source_files(Path(__file__).parent.parent / "*.vhd")
+spi_lib = vu.add_library("spi_lib")
+spi_lib.add_source_files(Path(__file__).parent / "*.vhd")
+spi_lib.add_source_files(Path(__file__).parent.parent / "*.vhd")
 
-tb = work.test_bench("tb_spi_master")
+tb = spi_lib.test_bench("tb_spi_master")
 
 test = tb.test("01_all_sclk_scs_idle_cases")
 counter = 0

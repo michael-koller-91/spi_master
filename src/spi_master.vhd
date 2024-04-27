@@ -3,8 +3,8 @@ use ieee.math_real.all;
 use ieee.numeric_std.all;
 use ieee.std_logic_1164.all;
 
-library work;
-use work.spi_package.all;
+library spi_lib;
+use spi_lib.spi_package.all;
 
 entity spi_master is
   generic (

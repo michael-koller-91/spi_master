@@ -10,8 +10,8 @@ library osvvm;
 use osvvm.TbUtilPkg.all;
 use osvvm.RandomPkg.all;
 
-library work;
-use work.spi_package.all;
+library spi_lib;
+use spi_lib.spi_package.all;
 
 entity tb_spi_master is
   generic (
@@ -122,7 +122,7 @@ begin
   settings.n_clks_le_width_minus_1                 <= to_unsigned(n_clks_le_width - 1, ceil_log2(C_CONFIG.max_n_clks_le_width));
   settings.n_clks_rx_sample_strobes_delay          <= to_unsigned(n_clks_rx_sample_strobes_delay, ceil_log2(C_CONFIG.max_n_clks_rx_sample_strobes_delay + 1));
 
-  e_dut : entity work.spi_master(arch)
+  e_dut : entity spi_lib.spi_master(arch)
     generic map(
       G_CONFIG => C_CONFIG
       )
