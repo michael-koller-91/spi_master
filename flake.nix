@@ -32,6 +32,8 @@
                     source ./$VENV/bin/activate
 
                     pip install -r requirements.txt
+
+                    export VSGCONFIG="$(pwd)/vsg_configuration.json"
                 '';
             };
     };
