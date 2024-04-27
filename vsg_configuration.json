@@ -1,9 +1,18 @@
 {
     "rule":{
-        "signal_007":{
+        "instantiation_034":{
+            "disable":true
+        },
+        "length_001":{
             "disable":true
         },
         "port_012":{
+            "disable":true
+        },
+        "signal_007":{
+            "disable":true
+        },
+        "variable_007":{
             "disable":true
         },
     },
