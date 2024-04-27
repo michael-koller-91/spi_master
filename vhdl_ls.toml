@@ -1,0 +1,7 @@
+[libraries]
+spi_lib.files = [
+  'src/spi_master.vhd',
+  'src/spi_package.vhd',
+  'src/simulation/tb_spi_master.vhd',
+]
+
