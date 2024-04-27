@@ -1,7 +1,16 @@
 [libraries]
+
+osvvm.files = [
+  '.venv/lib/python3.11/site-packages/vunit/vhdl/osvvm/*.vhd',
+]
+
 spi_lib.files = [
   'src/spi_master.vhd',
   'src/spi_package.vhd',
   'src/simulation/tb_spi_master.vhd',
+]
+
+vunit_lib.files = [
+  '.venv/lib/python3.11/site-packages/vunit/vhdl/*.vhd',
 ]
 
