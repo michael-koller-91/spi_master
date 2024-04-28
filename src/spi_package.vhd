@@ -54,10 +54,10 @@ package spi_package is
     -- The idle value of SCLK.
     sclk_idle_state : std_ulogic;
 
-    -- If this is equal to '1', transmit data to the peripheral when SCLK transitions into its idle value.
-    -- If this is equal to '0', transmit data to the peripheral when SCLK transitions out of its idle value.
-    -- In both cases, the non-transmit SCLK edge is used to sample the data received from the peripheral.
-    transmit_on_sclk_edge_toward_idle_state : std_ulogic;
+    -- The SCLK has two edges: The first/leading/left edge and the second/trailing/right edge.
+    -- If `transmit_on_sclk_leading_edge` is equal to '1', data is transmitted to the peripheral on the leading edge.
+    -- If `transmit_on_sclk_leading_edge` is equal to '0', data is transmitted to the peripheral on the trailing edge.
+    transmit_on_sclk_leading_edge : std_ulogic;
 
     -- The strobes used to sample data received from the peripheral can be
     -- delayed by this number of system clock cycles.
@@ -112,3 +112,4 @@ package body spi_package is
   end function;
 
 end package body spi_package;
+

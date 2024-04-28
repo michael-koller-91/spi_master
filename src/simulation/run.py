@@ -16,7 +16,7 @@ def parse_port_names(filename):
 
 
 def parse_signal_names(filename):
-    p = re.compile(r"\bsignal.*:.*;")
+    p = re.compile(r"\bsignal.*:.*:=.*;")
     signal_names = []
     with open(filename, "r") as f:
         for line in f.readlines():
@@ -60,8 +60,8 @@ for sclk_idle_state in ["'0'", "'1'"]:
         test.add_config(
             name=f"c{counter}.sclk_idle={sclk_idle_state}.scs_idle={scs_idle_state}",
             generics={
-                "G_SCLK_IDLE_STATE": sclk_idle_state,
-                "G_SCS_IDLE_STATE": scs_idle_state,
+                "g_sclk_idle_state": sclk_idle_state,
+                "g_scs_idle_state": scs_idle_state,
             },
         )
 
@@ -71,10 +71,10 @@ for sclk_idle_state in ["'0'", "'1'"]:
     for transmit_edge in ["'0'", "'1'"]:
         counter += 1
         test.add_config(
-            name=f"c{counter}.sclk_idle={sclk_idle_state}.transmit_toward_idle={transmit_edge}",
+            name=f"c{counter}.sclk_idle={sclk_idle_state}.transmit_leading={transmit_edge}",
             generics={
-                "G_SCLK_IDLE_STATE": sclk_idle_state,
-                "G_TRANSMIT_ON_SCLK_EDGE_TOWARD_IDLE_STATE": transmit_edge,
+                "g_sclk_idle_state": sclk_idle_state,
+                "g_transmit_on_sclk_leading_edge": transmit_edge,
             },
         )
 
@@ -85,7 +85,7 @@ for divide in [1, 2, 5, 10]:
     test.add_config(
         name=f"c{counter}.max_sclk_divide={divide}",
         generics={
-            "G_MAX_SCLK_DIVIDE_HALF": divide,
+            "g_max_sclk_divide_half": divide,
         },
     )
 
@@ -96,17 +96,17 @@ for n_bits in [1, 2, 3, 4]:
     test.add_config(
         name=f"c{counter}.max_n_bits={n_bits}",
         generics={
-            "G_MAX_N_BITS": n_bits,
+            "g_max_n_bits": n_bits,
         },
     )
 
 seed = random.randint(1_000_000, 9_999_999)
 
 test = tb.test("05_transmit")
-test.add_config(name=f"rng_seed={seed}", generics={"G_RNG_SEED": seed})
+test.add_config(name=f"rng_seed={seed}", generics={"g_rng_seed": seed})
 
 test = tb.test("06_receive")
-test.add_config(name=f"rng_seed={seed}", generics={"G_RNG_SEED": seed})
+test.add_config(name=f"rng_seed={seed}", generics={"g_rng_seed": seed})
 
 test = tb.test("07_max_n_clks_scs_to_sclk")
 counter = 0
@@ -115,7 +115,7 @@ for n_clks in [1, 2, 3, 4]:
     test.add_config(
         name=f"c{counter}.max_n_clks_scs_to_sclk={n_clks}",
         generics={
-            "G_MAX_N_CLKS_SCS_TO_SCLK": n_clks,
+            "g_max_n_clks_scs_to_sclk": n_clks,
         },
     )
 
@@ -126,7 +126,7 @@ for n_clks in [1, 2, 3, 4]:
     test.add_config(
         name=f"c{counter}.max_n_clks_sclk_to_scs={n_clks}",
         generics={
-            "G_MAX_N_CLKS_SCLK_TO_SCS": n_clks,
+            "g_max_n_clks_sclk_to_scs": n_clks,
         },
     )
 
@@ -137,7 +137,7 @@ for n_clks in [0, 1, 2, 3, 10]:
     test.add_config(
         name=f"c{counter}.max_n_clks_rx_sample_strobes_delay={n_clks}",
         generics={
-            "G_MAX_N_CLKS_RX_SAMPLE_STROBES_DELAY": n_clks,
+            "g_max_n_clks_rx_sample_strobes_delay": n_clks,
         },
     )
 
