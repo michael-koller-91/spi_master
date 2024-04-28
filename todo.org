@@ -1,4 +1,0 @@
-# -*- mode: org -*-
-* TODO timing diagram
-* TODO implement a cs keep
-* TODO implement multiple cs
