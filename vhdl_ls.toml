@@ -11,6 +11,6 @@ spi_lib.files = [
 ]
 
 vunit_lib.files = [
-  '.venv/lib/python3.11/site-packages/vunit/vhdl/*.vhd',
+  '.venv/lib/python3.11/site-packages/vunit/vhdl/*/src/*.vhd',
 ]
 

@@ -33,7 +33,7 @@ package spi_package is
     max_n_clks_le_width : positive;
 
     -- The maximum number of system clock cycles by which the receive sample strobes can be delayed.
-    max_n_clks_rx_sample_strobes_delay : natural;
+    max_n_clks_rx_sample_strobes_delay : positive;
   end record t_config;
 
   constant c_default_config : t_config :=
