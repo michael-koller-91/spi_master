@@ -17,6 +17,7 @@ entity tb_spi_master is
   generic (
     runner_cfg                           : string;
     g_rng_seed                           : integer    := 2;
+    g_warning                            : boolean    := false;
     g_sclk_idle_state                    : std_ulogic := '1';
     g_scs_idle_state                     : std_ulogic := '1';
     g_transmit_on_sclk_leading_edge      : std_ulogic := '1';
@@ -175,6 +176,13 @@ begin
 
     RV.InitSeed(g_rng_seed);
     info("g_rng_seed = " & to_string(g_rng_seed));
+
+    if (g_warning) then
+      level <= warning;
+    end if;
+
+    WaitForClock(clk, 1);
+    info("level = " & to_string(level));
 
     --
     -- by default, use the testbench generics
@@ -606,14 +614,14 @@ begin
 
     wait until start = '1';
 
-    for n in d_to_peripheral'range loop
+    for n in d_to_peripheral'left downto d_to_peripheral'left - n_bits + 1 loop
 
       if (transmit_on_sclk_leading_edge = '1') then
         wait_until_sclk_leading_edge(o_sclk, sclk_idle_state);
-        check_equal(o_sd_to_peripheral, d_to_peripheral(n), result("for o_sd_to_peripheral"), level => level);
+        check_equal(o_sd_to_peripheral, d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
       else
         wait_until_sclk_trailing_edge(o_sclk, sclk_idle_state);
-        check_equal(o_sd_to_peripheral, d_to_peripheral(n), result("for o_sd_to_peripheral"), level => level);
+        check_equal(o_sd_to_peripheral, d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
       end if;
 
     end loop;

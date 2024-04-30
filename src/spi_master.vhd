@@ -83,23 +83,25 @@ architecture arch of spi_master is
   signal keep_streaming : std_ulogic := '0';
 
   -- sampled settings
-  signal streaming_mode                          : std_ulogic                                                     := '0';
-  signal sclk_divide_half_minus_1                : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
-  signal transmit_on_sclk_edge_toward_idle_state : std_ulogic                                                     := '1';
-  signal transmit_on_sclk_leading_edge           : std_ulogic                                                     := '1';
-  signal n_clks_sclk_to_scs_minus_1              : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1         := 0;
-  signal n_clks_sclk_to_le_minus_1               : natural range 0 to g_config.max_n_clks_sclk_to_le - 1          := 0;
-  signal n_clks_le_width_minus_1                 : natural range 0 to g_config.max_n_clks_le_width - 1            := 0;
-  signal n_clks_rx_sample_strobes_delay          : natural range 0 to g_config.max_n_clks_rx_sample_strobes_delay := 0;
+  signal streaming_mode                 : std_ulogic                                                     := '0';
+  signal sclk_divide_half_minus_1       : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
+  signal transmit_on_sclk_leading_edge  : std_ulogic                                                     := '1';
+  signal n_clks_sclk_to_scs_minus_1     : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1         := 0;
+  signal n_clks_sclk_to_le_minus_1      : natural range 0 to g_config.max_n_clks_sclk_to_le - 1          := 0;
+  signal n_clks_le_width_minus_1        : natural range 0 to g_config.max_n_clks_le_width - 1            := 0;
+  signal n_clks_rx_sample_strobes_delay : natural range 0 to g_config.max_n_clks_rx_sample_strobes_delay := 0;
 
   -- data
   signal d_to_peripheral   : std_ulogic_vector(g_config.max_n_bits - 1 downto 0)        := (others => '0');
   signal d_from_peripheral : std_ulogic_vector(g_config.max_n_bits - 1 downto 0)        := (others => '0');
   signal sdi_reg           : std_ulogic                                                 := '0';
   signal sdo_reg           : std_ulogic                                                 := '0';
-  signal sdo_sreg          : std_ulogic_vector(g_config.max_sclk_divide_half  downto 1) := (others => '0');
 
 begin
+
+  ---------------------------------------------------------------------------
+  -- handle in ports
+  ---------------------------------------------------------------------------
 
   -- block start if busy
   start <= i_start and not busy;
@@ -121,22 +123,13 @@ begin
 
   end process p_sample_settings;
 
-  keep_streaming    <= i_keep_streaming;
+  keep_streaming <= i_keep_streaming;
+
+  ---------------------------------------------------------------------------
+  -- handle out ports
+  ---------------------------------------------------------------------------
+
   o_streaming_start <= streaming_start;
-
-  p_delay_sample_sdi : process (i_clk) is
-  begin
-
-    if rising_edge(i_clk) then
-      sclk_post_leading_edge <= sclk_pre_leading_edge;
-
-      sample_sdi_sreg <= sample_sdi_sreg(sample_sdi_sreg'left - 1 downto 0) & sclk_post_leading_edge;
-      sample_sdi      <= sample_sdi_sreg(n_clks_rx_sample_strobes_delay);
-
-      sample_sdi_d <= sample_sdi;
-    end if;
-
-  end process p_delay_sample_sdi;
 
   o_d_from_peripheral <= d_from_peripheral;
 
@@ -151,6 +144,10 @@ begin
   o_le   <= le;
 
   o_sd_to_peripheral <= sdo_reg;
+
+  ---------------------------------------------------------------------------
+  -- The control FSM.
+  ---------------------------------------------------------------------------
 
   p_fsm : process (i_clk) is
   begin
@@ -223,7 +220,10 @@ begin
 
           busy  <= '0';
           ready <= '0';
-          scs   <= i_settings.scs_idle_state;                                                                   -- make in-port change visible at out-port without the need of a start strobe
+
+          -- make in-port change visible at out-port without the need of a start strobe
+          scs <= i_settings.scs_idle_state;
+
           if (start = '1') then
             -- `counter_n_sclk_edges` counts 2 * n_bits sclk edges:
             --    from 2 * n_bits - 1 downto 0
@@ -266,6 +266,10 @@ begin
 
   end process p_count_sample_sdi_strobes;
 
+  ---------------------------------------------------------------------------
+  -- Generate the SCLK.
+  ---------------------------------------------------------------------------
+
   p_generate_sclk : process (i_clk) is
   begin
 
@@ -285,6 +289,9 @@ begin
         end if;
       end if;
 
+      -- Two delays in order to be able to make use of the `sclk_edge` signal
+      -- for sampling of the incoming and outgoing data.
+
       if (i_settings.sclk_idle_state = '0') then
         sclk_reg1 <= sclk;
       else
@@ -298,17 +305,63 @@ begin
 
   sclk_pre_leading_edge <= sclk_edge and sclk;
 
-  p_receive_from_peripheral : process (i_clk) is
-  begin
+  ---------------------------------------------------------------------------
+  -- This part generates `sample_sdo` such that it is high two clock
+  -- cycles before the `o_sclk` edge at which `o_sd_to_peripheral`
+  -- is supposed to be stable/valid.
+  -- As a result the data is already stable/valid one clock cycle
+  -- before the `o_sclk` edge.
+  ---------------------------------------------------------------------------
 
-    if rising_edge(i_clk) then
-      sdi_reg <= i_sd_from_peripheral;
-      if (sample_sdi = '1') then
-        d_from_peripheral <= d_from_peripheral(d_from_peripheral'left - 1 downto 0) & sdi_reg;
+  generate_sample_sdo : if g_config.max_sclk_divide_half = 1 generate
+
+    p_delay_sample_sdo : process (i_clk) is
+    begin
+
+      if rising_edge(i_clk) then
+        sample_sdo_sreg(sample_sdo_sreg'left) <= sclk_pre_leading_edge;
       end if;
-    end if;
 
-  end process p_receive_from_peripheral;
+    end process p_delay_sample_sdo;
+
+    p_sample_sdo : process (all) is
+    begin
+
+      if (transmit_on_sclk_leading_edge = '1') then
+        sample_sdo <= sclk_pre_leading_edge;
+      else
+        sample_sdo <= sample_sdo_sreg(sample_sdo_sreg'left);
+      end if;
+
+    end process p_sample_sdo;
+
+  else generate
+
+    p_delay_sample_sdo : process (i_clk) is
+    begin
+
+      if rising_edge(i_clk) then
+        sample_sdo_sreg <= sample_sdo_sreg(sample_sdo_sreg'left - 1 downto 0) & sclk_pre_leading_edge;
+      end if;
+
+    end process p_delay_sample_sdo;
+
+    p_sample_sdo : process (all) is
+    begin
+
+      if (transmit_on_sclk_leading_edge = '1') then
+        sample_sdo <= sclk_pre_leading_edge;
+      else
+        sample_sdo <= sample_sdo_sreg(sclk_divide_half_minus_1);
+      end if;
+
+    end process p_sample_sdo;
+
+  end generate generate_sample_sdo;
+
+  ---------------------------------------------------------------------------
+  -- Sample the data going to the peripheral.
+  ---------------------------------------------------------------------------
 
   p_transmit_to_peripheral : process (i_clk) is
   begin
@@ -326,51 +379,40 @@ begin
 
   end process p_transmit_to_peripheral;
 
-  generate_sample_sdo : if g_config.max_sclk_divide_half = 1 generate
+  ---------------------------------------------------------------------------
+  -- Delay the sample strobe which is used to sample the data
+  -- coming from the peripheral.
+  ---------------------------------------------------------------------------
 
-    p_delay_sample_sdo_1 : process (i_clk) is
-    begin
+  p_delay_sample_sdi : process (i_clk) is
+  begin
 
-      if rising_edge(i_clk) then
-        sample_sdo_sreg(sample_sdo_sreg'left) <= sclk_pre_leading_edge;
+    if rising_edge(i_clk) then
+      sclk_post_leading_edge <= sclk_pre_leading_edge;
+
+      sample_sdi_sreg <= sample_sdi_sreg(sample_sdi_sreg'left - 1 downto 0) & sclk_post_leading_edge;
+      sample_sdi      <= sample_sdi_sreg(n_clks_rx_sample_strobes_delay);
+
+      sample_sdi_d <= sample_sdi;
+    end if;
+
+  end process p_delay_sample_sdi;
+
+  ---------------------------------------------------------------------------
+  -- Sample the data coming from the peripheral.
+  ---------------------------------------------------------------------------
+
+  p_receive_from_peripheral : process (i_clk) is
+  begin
+
+    if rising_edge(i_clk) then
+      sdi_reg <= i_sd_from_peripheral;
+      if (sample_sdi = '1') then
+        d_from_peripheral <= d_from_peripheral(d_from_peripheral'left - 1 downto 0) & sdi_reg;
       end if;
+    end if;
 
-    end process p_delay_sample_sdo_1;
-
-    p_sample_sdo_1 : process (all) is
-    begin
-
-      if (transmit_on_sclk_leading_edge = '1') then
-        sample_sdo <= sclk_pre_leading_edge;
-      else
-        sample_sdo <= sample_sdo_sreg(sample_sdo_sreg'left);
-      end if;
-
-    end process p_sample_sdo_1;
-
-  else generate
-
-    p_delay_sample_sdo_2 : process (i_clk) is
-    begin
-
-      if rising_edge(i_clk) then
-        sample_sdo_sreg <= sample_sdo_sreg(sample_sdo_sreg'left -1 downto 0) & sclk_pre_leading_edge;
-      end if;
-
-    end process p_delay_sample_sdo_2;
-
-    p_sample_sdo_2 : process (all) is
-    begin
-
-      if (transmit_on_sclk_leading_edge = '1') then
-        sample_sdo <= sclk_pre_leading_edge;
-      else
-        sample_sdo <= sample_sdo_sreg(sclk_divide_half_minus_1);
-      end if;
-
-    end process p_sample_sdo_2;
-
-  end generate generate_sample_sdo;
+  end process p_receive_from_peripheral;
 
 end architecture arch;
 
