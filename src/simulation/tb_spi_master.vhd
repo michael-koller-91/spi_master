@@ -231,21 +231,25 @@ begin
 
       if run("01_all_sclk_scs_idle_cases") then
         start <= '1';
+
         WaitForClock(clk, 1);
         start <= '0';
 
         WaitForClock(clk, 1);
-        -- check_equal(ready, '0', result("for ready"));
+        check_equal(ready, '0', result("for ready"));
+
         wait until rising_edge(ready);
+
         WaitForClock(clk, 2);
-      -- check_equal(ready, '0', result("for ready"));
+        check_equal(ready, '0', result("for ready"));
       elsif run("02_all_sclk_transmit_edge_cases") then
         start <= '1';
+
         WaitForClock(clk, 1);
         start <= '0';
 
         WaitForClock(clk, 1);
-        -- check_equal(ready, '0', result("for ready"));
+        check_equal(ready, '0', result("for ready"));
 
         wait until ready = '1';
       elsif run("03_sclk_divide") then
@@ -257,11 +261,12 @@ begin
           info("sclk_divide_half = " & to_string(sclk_divide_half));
 
           start <= '1';
+
           WaitForClock(clk, 1);
           start <= '0';
 
           WaitForClock(clk, 1);
-          -- check_equal(ready, '0', result("for ready"));
+          check_equal(ready, '0', result("for ready"));
 
           wait until ready = '1';
 
@@ -278,11 +283,12 @@ begin
           info("n_bits = " & to_string(n_bits));
 
           start <= '1';
+
           WaitForClock(clk, 1);
           start <= '0';
 
           WaitForClock(clk, 1);
-          -- check_equal(ready, '0', result("for ready"));
+          check_equal(ready, '0', result("for ready"));
 
           wait until ready = '1';
 
@@ -486,7 +492,7 @@ begin
     wait for 0 fs;
 
     if (streaming_mode = '0') then
-    -- check_equal(ready, ready_reference, "ready is not equal to ready_reference.");
+      check_equal(ready, ready_reference, "ready is not equal to ready_reference.");
     end if;
 
   end process p_check_ready;
@@ -562,7 +568,7 @@ begin
       wait for 0 fs;
 
       if (streaming_mode = '0') then
-      -- check_equal(o_scs, scs_reference, "o_scs is not equal to scs_reference.");
+        check_equal(o_scs, scs_reference, "o_scs is not equal to scs_reference.");
       end if;
 
     end loop;
@@ -598,7 +604,7 @@ begin
       wait for 0 fs;
 
       if (streaming_mode = '0') then
-      -- check_equal(le, le_reference, "le is not equal to le_reference.");
+        check_equal(le, le_reference, "le is not equal to le_reference.");
       end if;
 
     end loop;
