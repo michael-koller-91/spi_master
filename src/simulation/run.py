@@ -2,7 +2,7 @@ import os
 import re
 import random
 from pathlib import Path
-from vunit import VUnit
+from vunit import VUnit, VUnitCLI
 
 
 def parse_port_names(filename):
@@ -42,7 +42,12 @@ def generate_waveform_file(filename):
         f.writelines(lines)
 
 
-vu = VUnit.from_argv(compile_builtins=False)
+cli = VUnitCLI()
+cli.parser.add_argument("--warn", action="store_true")
+args = cli.parse_args()
+
+vu = VUnit.from_args(args=args)
+
 vu.add_vhdl_builtins()
 vu.add_osvvm()
 
@@ -140,6 +145,10 @@ for n_clks in [0, 1, 2, 3, 10]:
             "g_max_n_clks_rx_sample_strobes_delay": n_clks,
         },
     )
+
+if args.warn:
+    for test in tb.get_tests():
+        test.set_generic("g_warning", True)
 
 waveform_filename = "waveform.tcl"
 generate_waveform_file(waveform_filename)
