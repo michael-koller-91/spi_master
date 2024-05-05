@@ -90,6 +90,10 @@ package spi_package is
     n_clks_le_width_minus_1 : unsigned;
   end record t_settings;
 
+  type t_state is (idle, wait_sclk, trx, wait_scs_and_le_and_sample_sdi);
+
+  type t_sclk_fsm_state is (idle, generating);
+
   -- How many bits are needed to represent `value` values?
 
   function ceil_log2 (
