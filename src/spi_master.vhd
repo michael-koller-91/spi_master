@@ -68,6 +68,7 @@ architecture arch of spi_master is
   signal sample_sdo                     : std_ulogic                                                              := '0';
 
   signal state     : t_state         := idle;
+  signal le_state  : t_le_fsm_state  := idle;
   signal scs_state : t_scs_fsm_state := inactive;
   signal sclk_done : std_ulogic      := '0';
 
@@ -162,11 +163,10 @@ begin
 
     if rising_edge(i_clk) then
       o_scs <= scs;
+      o_le  <= le;
     end if;
 
   end process p_output_register;
-
-  o_le <= le;
 
   o_sd_to_peripheral <= sdo_reg;
 
@@ -206,9 +206,9 @@ begin
                 sclk_stop  <= '1';
                 state      <= wait_scs_and_le_and_sample_sdi;
               end if;
-              -- counter_n_clks_sclk_to_scs <= n_clks_sclk_to_scs_minus_1;
-              counter_n_clks_sclk_to_le <= n_clks_sclk_to_le_minus_1;
-              counter_n_clks_le_width   <= n_clks_le_width_minus_1;
+            -- counter_n_clks_sclk_to_scs <= n_clks_sclk_to_scs_minus_1;
+            -- counter_n_clks_sclk_to_le <= n_clks_sclk_to_le_minus_1;
+            -- counter_n_clks_le_width <= n_clks_le_width_minus_1;
             end if;
           else
             if (counter_clk_divide = 0) then
@@ -228,18 +228,18 @@ begin
 
           if (enable_le = '1') then
             if (counter_n_clks_sclk_to_le = 0) then
-              le        <= '1';
+              -- le        <= '1';
               enable_le <= '0';
             else
-              counter_n_clks_sclk_to_le <= counter_n_clks_sclk_to_le - 1;
+            -- counter_n_clks_sclk_to_le <= counter_n_clks_sclk_to_le - 1;
             end if;
           end if;
 
           if (le = '1') then
             if (counter_n_clks_le_width = 0) then
-              le <= '0';
+            -- le <= '0';
             else
-              counter_n_clks_le_width <= counter_n_clks_le_width - 1;
+            -- counter_n_clks_le_width <= counter_n_clks_le_width - 1;
             end if;
           end if;
 
@@ -304,7 +304,58 @@ begin
   end process p_count_sample_sdi_strobes;
 
   ---------------------------------------------------------------------------
-  -- Generate the SCS.
+  -- Generate LE.
+  ---------------------------------------------------------------------------
+
+  p_generate_le : process (i_clk) is
+  begin
+
+    if rising_edge(i_clk) then
+
+      case le_state is
+
+        when wait_until_sclk_done =>
+
+          if (sclk_done) then
+            le_state <= wait_until_active;
+          end if;
+
+        when wait_until_active =>
+
+          if (counter_n_clks_sclk_to_le = 0) then
+            le                      <= '1';
+            counter_n_clks_le_width <= n_clks_le_width_minus_1;
+            le_state                <= active;
+          else
+            counter_n_clks_sclk_to_le <= counter_n_clks_sclk_to_le - 1;
+          end if;
+
+        when active =>
+
+          if (counter_n_clks_le_width = 0) then
+            le       <= '0';
+            le_state <= idle;
+          else
+            counter_n_clks_le_width <= counter_n_clks_le_width - 1;
+          end if;
+
+        when others =>
+
+          le <= '0';
+
+          if (start) then
+            counter_n_clks_sclk_to_le <= to_integer(i_settings.n_clks_sclk_to_le_minus_1);
+            le_state                  <= wait_until_sclk_done;
+          end if;
+
+      end case;
+
+    end if;
+
+  end process p_generate_le;
+
+  ---------------------------------------------------------------------------
+  -- Generate SCS.
   ---------------------------------------------------------------------------
 
   p_generate_scs : process (i_clk) is
@@ -343,7 +394,7 @@ begin
   end process p_generate_scs;
 
   ---------------------------------------------------------------------------
-  -- Generate the SCLK.
+  -- Generate SCLK.
   ---------------------------------------------------------------------------
 
   p_reset_sclk_delayed : process (all) is

@@ -94,7 +94,7 @@ architecture arch of tb_spi_master is
   signal sclk_reference  : std_ulogic := '0';
   signal o_scs           : std_ulogic := '0';
   signal scs_reference   : std_ulogic := '0';
-  signal le              : std_ulogic := '0';
+  signal o_le            : std_ulogic := '0';
   signal le_reference    : std_ulogic := '0';
 
   signal sclk_divide_half               : natural range 1 to c_config.max_sclk_divide_half               := 1;
@@ -155,7 +155,7 @@ begin
       --
       i_settings => settings,
       --
-      o_le                 => le,
+      o_le                 => o_le,
       o_scs                => o_scs,
       o_sclk               => o_sclk,
       o_sd_to_peripheral   => o_sd_to_peripheral,
@@ -564,7 +564,7 @@ begin
     scs_reference <= scs_idle_state;
 
     wait until falling_edge(start);
-    WaitForClock(clk, 1); -- output register
+    WaitForClock(clk, 1); -- due to output register
     scs_reference <= not scs_idle_state;
 
     WaitForClock(clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_scs);
@@ -598,6 +598,7 @@ begin
   begin
 
     wait until falling_edge(start);
+    WaitForClock(clk, 1); -- due to output register
     le_reference <= '0';
 
     WaitForClock(clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_le);
@@ -615,11 +616,11 @@ begin
 
     while not ready = '1' loop
 
-      wait on le, le_reference;
+      wait on o_le, le_reference;
       wait for 0 fs;
 
       if (streaming_mode = '0') then
-        check_equal(le, le_reference, "le is not equal to le_reference.", level => level);
+        check_equal(o_le, le_reference, "o_le is not equal to le_reference.", level => level);
       end if;
 
     end loop;

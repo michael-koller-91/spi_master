@@ -96,6 +96,8 @@ package spi_package is
 
   type t_scs_fsm_state is (inactive, active);
 
+  type t_le_fsm_state is (idle, wait_until_sclk_done, wait_until_active, active);
+
   -- How many bits are needed to represent `value` values?
 
   function ceil_log2 (
