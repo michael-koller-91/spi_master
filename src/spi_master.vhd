@@ -67,8 +67,9 @@ architecture arch of spi_master is
   signal sample_sdi_reg                 : std_ulogic                                                              := '0';
   signal sample_sdo                     : std_ulogic                                                              := '0';
 
-  signal state : t_state := idle;
-  -- signal sclk_state : t_sclk_fsm_state := idle;
+  signal state     : t_state         := idle;
+  signal scs_state : t_scs_fsm_state := inactive;
+  signal sclk_done : std_ulogic      := '0';
 
   signal le        : std_ulogic := '0';
   signal enable_le : std_ulogic := '0';
@@ -76,7 +77,6 @@ architecture arch of spi_master is
   signal busy               : std_ulogic                                                   := '0';
   signal ready              : std_ulogic                                                   := '0';
   signal sclk_start         : std_ulogic                                                   := '1';
-  signal sclk_start_sreg    : std_ulogic_vector(g_config.max_n_clks_sclk_to_scs  downto 1) := (others => '0');
   signal reset_sclk         : std_ulogic                                                   := '1';
   signal reset_sclk_delayed : std_ulogic                                                   := '1';
   signal reset_sclk_sreg    : std_ulogic_vector(g_config.max_n_clks_sclk_to_scs  downto 1) := (others => '0');
@@ -206,9 +206,9 @@ begin
                 sclk_stop  <= '1';
                 state      <= wait_scs_and_le_and_sample_sdi;
               end if;
-              counter_n_clks_sclk_to_scs <= n_clks_sclk_to_scs_minus_1;
-              counter_n_clks_sclk_to_le  <= n_clks_sclk_to_le_minus_1;
-              counter_n_clks_le_width    <= n_clks_le_width_minus_1;
+              -- counter_n_clks_sclk_to_scs <= n_clks_sclk_to_scs_minus_1;
+              counter_n_clks_sclk_to_le <= n_clks_sclk_to_le_minus_1;
+              counter_n_clks_le_width   <= n_clks_le_width_minus_1;
             end if;
           else
             if (counter_clk_divide = 0) then
@@ -220,11 +220,11 @@ begin
 
           sclk_stop <= '0';
 
-          if (counter_n_clks_sclk_to_scs = 0) then
-            scs <= i_settings.scs_idle_state;
-          else
-            counter_n_clks_sclk_to_scs <= counter_n_clks_sclk_to_scs - 1;
-          end if;
+          -- if (counter_n_clks_sclk_to_scs = 0) then
+          ---- scs <= i_settings.scs_idle_state;
+          -- else
+          --  counter_n_clks_sclk_to_scs <= counter_n_clks_sclk_to_scs - 1;
+          -- end if;
 
           if (enable_le = '1') then
             if (counter_n_clks_sclk_to_le = 0) then
@@ -254,7 +254,7 @@ begin
           ready <= '0';
 
           -- make in-port change visible at out-port without the need of a start strobe
-          scs <= i_settings.scs_idle_state;
+          -- scs <= i_settings.scs_idle_state;
 
           if (start) then
             -- `counter_n_sclk_edges2g` counts 2 * n_bits sclk edges:
@@ -264,7 +264,7 @@ begin
             --
             -- counter_n_clks_scs_to_sclk <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
             -- counter_n_clks_scs_to_sclk := to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
-            scs <= not i_settings.scs_idle_state;
+            -- scs <= not i_settings.scs_idle_state;
             --
             enable_le <= '1';
             --
@@ -302,6 +302,45 @@ begin
     end if;
 
   end process p_count_sample_sdi_strobes;
+
+  ---------------------------------------------------------------------------
+  -- Generate the SCS.
+  ---------------------------------------------------------------------------
+
+  p_generate_scs : process (i_clk) is
+  begin
+
+    if rising_edge(i_clk) then
+
+      case scs_state is
+
+        when active =>
+
+          if (sclk_done) then
+            if (counter_n_clks_sclk_to_scs = 0) then
+              scs_state <= inactive;
+            else
+              counter_n_clks_sclk_to_scs <= counter_n_clks_sclk_to_scs - 1;
+            end if;
+          end if;
+
+        when others =>
+
+          -- make in-port change visible at out-port without the need of a start strobe
+          scs <= i_settings.scs_idle_state;
+
+          if (start) then
+            scs <= not i_settings.scs_idle_state;
+
+            counter_n_clks_sclk_to_scs <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
+            scs_state                  <= active;
+          end if;
+
+      end case;
+
+    end if;
+
+  end process p_generate_scs;
 
   ---------------------------------------------------------------------------
   -- Generate the SCLK.
@@ -345,7 +384,7 @@ begin
 
   p_generate_sclk : process (i_clk) is
 
-    variable sclk_state                 : t_sclk_fsm_state                                       := idle;
+    variable sclk_state                 : t_sclk_fsm_state                                       := inactive;
     variable start_came                 : boolean                                                := false;
     variable counter_n_clks_scs_to_sclk : integer range 0 to g_config.max_n_clks_scs_to_sclk - 1 := 0;
     variable sclk_divide_half_minus_1   : natural range 0 to g_config.max_sclk_divide_half - 1   := 0;
@@ -356,7 +395,7 @@ begin
 
       case sclk_state is
 
-        when generating =>
+        when active =>
 
           start_came := false;
 
@@ -368,7 +407,8 @@ begin
 
             counter_n_sclk_edges <= counter_n_sclk_edges - 1;
             if (counter_n_sclk_edges = 1) then
-              sclk_state := idle;
+              sclk_state := inactive;
+              sclk_done  <= '1';
             end if;
           else
             counter_clk_divide <= counter_clk_divide - 1;
@@ -382,8 +422,9 @@ begin
 
           if (start = '1') then
             start_came                 := true;
+            sclk_done                  <= '0';
             counter_n_clks_scs_to_sclk := to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
-            sclk_divide_half_minus_1 := to_integer(i_settings.sclk_divide_half_minus_1);
+            sclk_divide_half_minus_1   := to_integer(i_settings.sclk_divide_half_minus_1);
           end if;
 
           if (start_came) then
@@ -397,7 +438,7 @@ begin
               --    <=> from 2 * (n_bits - 1) + 1 downto 0
               counter_n_sclk_edges <= to_integer(i_settings.n_bits_minus_1 & '1');
 
-              sclk_state := generating;
+              sclk_state := active;
             else
               counter_n_clks_scs_to_sclk := counter_n_clks_scs_to_sclk - 1;
             end if;
