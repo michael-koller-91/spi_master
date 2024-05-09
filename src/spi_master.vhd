@@ -22,7 +22,7 @@ entity spi_master is
     o_busy            : out   std_ulogic := '0';
     o_ready           : out   std_ulogic := '0';
     o_streaming_start : out   std_ulogic := '0';
-    i_streaming_start : in    std_ulogic := '0';
+    i_keep_streaming  : in    std_ulogic := '0';
     -- data
     i_d_to_peripheral               : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
     o_d_from_peripheral             : out   std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
@@ -49,7 +49,7 @@ end entity spi_master;
 architecture arch of spi_master is
 
   signal counter_clk_divide         : natural range 0 to g_config.max_sclk_divide_half - 1   := 0;
-  signal counter_n_sclk_edges       : natural range 0 to 2 * g_config.max_n_bits - 1         := 2 * g_config.max_n_bits - 1;
+  signal counter_n_sclk_edges       : natural range 0 to 2 * g_config.max_n_bits             := 2 * g_config.max_n_bits - 1;
   signal counter_n_clks_sclk_to_scs : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1 := g_config.max_n_clks_sclk_to_scs - 1;
   signal counter_n_clks_sclk_to_le  : natural range 0 to g_config.max_n_clks_sclk_to_le - 1  := g_config.max_n_clks_sclk_to_le - 1;
   signal counter_n_clks_le_width    : natural range 0 to g_config.max_n_clks_le_width - 1    := g_config.max_n_clks_le_width - 1;
@@ -67,6 +67,8 @@ architecture arch of spi_master is
   signal sample_sdi_sreg                : std_ulogic_vector(g_config.max_n_clks_rx_sample_strobes_delay downto 0) := (others => '0');
   signal sample_sdi                     : std_ulogic                                                              := '0';
   signal sample_sdi_reg                 : std_ulogic                                                              := '0';
+  signal sample_sdi_read                : std_ulogic                                                              := '0';
+  signal sample_sdi_done                : std_ulogic                                                              := '0';
   signal sample_sdo                     : std_ulogic                                                              := '0';
 
   signal state     : t_state         := idle;
@@ -141,7 +143,7 @@ begin
 
   end process p_input_register;
 
-  streaming_start_in <= i_streaming_start;
+  keep_streaming <= i_keep_streaming;
 
   ---------------------------------------------------------------------------
   -- handle out-ports
@@ -151,8 +153,7 @@ begin
 
   o_d_from_peripheral <= d_from_peripheral;
 
-  o_d_from_peripheral_read_strobe <= sample_sdi_reg when counter_n_sample_sdi = 0 else
-                                     '0';
+  o_d_from_peripheral_read_strobe <= sample_sdi_read;
 
   o_busy  <= busy;
   o_ready <= ready;
@@ -192,12 +193,12 @@ begin
 
         when wait_scs_and_le_and_sample_sdi =>
 
-          if (sclk_done = '1' and counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0) then
+          if (sclk_done = '1' and counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and sample_sdi_done = '1') then -- counter_n_sample_sdi = 0) then
             ready <= '1';
             state <= idle;
           end if;
 
-        when others =>  -- idle
+        when others =>                                                                                                           -- idle
 
           busy  <= '0';
           ready <= '0';
@@ -218,16 +219,28 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (start = '1') then
+      if (start = '1' or sample_sdi_read = '1') then
         counter_n_sample_sdi <= to_integer(i_settings.n_bits_minus_1) + 1;
       else
         if (sample_sdi = '1') then
-          counter_n_sample_sdi <= counter_n_sample_sdi - 1;
+          if (counter_n_sample_sdi = 0) then
+            counter_n_sample_sdi <= 0;
+          else
+            if (counter_n_sample_sdi = 1) then
+              sample_sdi_done <= '1';
+            else
+              sample_sdi_done <= '0';
+            end if;
+            counter_n_sample_sdi <= counter_n_sample_sdi - 1;
+          end if;
         end if;
       end if;
     end if;
 
   end process p_count_sample_sdi_strobes;
+
+  sample_sdi_read <= sample_sdi_reg when counter_n_sample_sdi = 0 else
+                     '0';
 
   ---------------------------------------------------------------------------
   -- Generate LE.
@@ -284,43 +297,43 @@ begin
   -- Streaming FSM.
   ---------------------------------------------------------------------------
 
-  p_streaming_fsm : process (i_clk) is
-  begin
+  -- p_streaming_fsm : process (i_clk) is
+  -- begin
 
-    if rising_edge(i_clk) then
+  --  if rising_edge(i_clk) then
 
-      case streaming_state is
+  --    case streaming_state is
 
-        when detect_streaming =>
+  --      when detect_streaming =>
 
-          if (streaming_start_in) then
-            streaming_state <= streaming;
-          else
-            keep_streaming  <= '0';
-            streaming_state <= idle;
-          end if;
+  --        if (streaming_start_in) then
+  --          streaming_state <= streaming;
+  --        else
+  --          keep_streaming  <= '0';
+  --          streaming_state <= idle;
+  --        end if;
 
-        when streaming =>
+  --      when streaming =>
 
-          if (streaming_start_out) then
-            streaming_state <= detect_streaming;
-          end if;
+  --        if (streaming_start_out) then
+  --          streaming_state <= detect_streaming;
+  --        end if;
 
-        when others => -- idle
+  --      when others => -- idle
 
-          if (start) then
-            keep_streaming <= '1';
-          end if;
+  --        if (start) then
+  --          keep_streaming <= '1';
+  --        end if;
 
-          if (streaming_start_out and keep_streaming) then
-            streaming_state <= detect_streaming;
-          end if;
+  --        if (streaming_start_out and keep_streaming) then
+  --          streaming_state <= detect_streaming;
+  --        end if;
 
-      end case;
+  --    end case;
 
-    end if;
+  --  end if;
 
-  end process p_streaming_fsm;
+  -- end process p_streaming_fsm;
 
   ---------------------------------------------------------------------------
   -- Generate SCS.
@@ -389,12 +402,14 @@ begin
             sclk_internal      <= not sclk_internal;
             sclk_internal_edge <= '1';
 
-            counter_n_sclk_edges <= counter_n_sclk_edges - 1;
-            if (keep_streaming) then
-              if (counter_n_sclk_edges = 1) then
-                counter_n_sclk_edges <= to_integer(n_bits_minus_1 & '1');
-              end if;
+            if (counter_n_sclk_edges = 0) then
+              counter_n_sclk_edges <= to_integer(n_bits_minus_1 & '1');
+              streaming_start_out  <= '1';
             else
+              counter_n_sclk_edges <= counter_n_sclk_edges - 1;
+            end if;
+
+            if (not keep_streaming) then
               if (counter_n_sclk_edges = 1) then
                 sclk_state := inactive;
                 sclk_done  <= '1';
@@ -419,10 +434,10 @@ begin
 
           if (start_came) then
             if (counter_n_clks_scs_to_sclk = 0) then
-              counter_clk_divide  <= sclk_divide_half_minus_1;
-              sclk_internal       <= not sclk_internal;
-              sclk_internal_edge  <= '1';
-              streaming_start_out <= '1';
+              counter_clk_divide <= sclk_divide_half_minus_1;
+              sclk_internal      <= not sclk_internal;
+              sclk_internal_edge <= '1';
+              -- streaming_start_out  <= '1';
 
               -- `counter_n_sclk_edges` counts 2 * n_bits sclk edges:
               --    from 2 * n_bits - 1 downto 0
