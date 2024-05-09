@@ -5,6 +5,10 @@ library ieee;
 
 package spi_package is
 
+  ---------------------------------------------------------------------------
+  -- Description of generics and ports to configure the SPI master.
+  ---------------------------------------------------------------------------
+
   type t_config is record
     -- The maximum number of system clock cycles from SCS active to the first SCLK edge.
     max_n_clks_scs_to_sclk : positive;
@@ -63,13 +67,11 @@ package spi_package is
     -- delayed by this number of system clock cycles.
     n_clks_rx_sample_strobes_delay : unsigned;
 
-    streaming_mode : std_ulogic;
-
     -- If `N` system clock cycles should make up one SCLK cycle,
     -- set this variable to `N / 2 - 1`.
     sclk_divide_half_minus_1 : unsigned;
 
-    -- If `N` bits should be transmitted (and received),
+    -- If `N` bits should be transmitted and received,
     -- set this variable to `N - 1`.
     n_bits_minus_1 : unsigned;
 
@@ -90,6 +92,12 @@ package spi_package is
     n_clks_le_width_minus_1 : unsigned;
   end record t_settings;
 
+  ---------------------------------------------------------------------------
+  -- This part is only relevant for the implementation.
+  ---------------------------------------------------------------------------
+
+  -- States for state machines.
+
   type t_state is (idle, wait_sclk, trx, wait_scs_and_le_and_sample_sdi);
 
   type t_sclk_fsm_state is (inactive, active);
@@ -97,6 +105,8 @@ package spi_package is
   type t_scs_fsm_state is (inactive, active);
 
   type t_le_fsm_state is (idle, wait_until_sclk_done, wait_until_active, active);
+
+  type t_streaming_state is (idle, detect_streaming, streaming);
 
   -- How many bits are needed to represent `value` values?
 

@@ -43,7 +43,12 @@ def generate_waveform_file(filename):
 
 
 cli = VUnitCLI()
-cli.parser.add_argument("--warn", action="store_true")
+cli.parser.add_argument(
+    "--warn",
+    action="store_true",
+    help="If this argument is present, errors of VUnit checkers are treated "
+    "as warnings and the simulation continues if checks fail.",
+)
 args = cli.parse_args()
 
 vu = VUnit.from_args(args=args)

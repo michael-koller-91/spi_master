@@ -73,22 +73,22 @@ architecture arch of tb_spi_master is
 
   end procedure;
 
-  signal clk : std_ulogic := '0';
+  signal i_clk : std_ulogic := '0';
 
-  signal d_from_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal o_d_from_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal d_from_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal o_d_from_peripheral_read_strobe : std_ulogic                                          := '0';
-  signal d_to_peripheral                 : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal i_d_to_peripheral                 : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
-  signal start                : std_ulogic := '0';
+  signal i_start                : std_ulogic := '0';
   signal i_sd_from_peripheral : std_ulogic := '0';
   signal o_sd_to_peripheral   : std_ulogic := '0';
 
-  signal keep_streaming  : std_ulogic := '0';
-  signal streaming_start : std_ulogic := '0';
+  signal o_streaming_start : std_ulogic := '0';
+  signal i_streaming_start : std_ulogic := '0';
 
-  signal busy            : std_ulogic := '0';
-  signal ready           : std_ulogic := '0';
+  signal o_busy            : std_ulogic := '0';
+  signal o_ready           : std_ulogic := '0';
   signal ready_reference : std_ulogic := '0';
   signal o_sclk          : std_ulogic := '0';
   signal sclk_reference  : std_ulogic := '0';
@@ -110,7 +110,7 @@ architecture arch of tb_spi_master is
   signal transmit_on_sclk_leading_edge : std_ulogic := g_transmit_on_sclk_leading_edge;
   signal streaming_mode                : std_ulogic := '0';
 
-  signal settings : t_settings
+  signal i_settings : t_settings
         (
           sclk_divide_half_minus_1 (ceil_log2(c_config.max_sclk_divide_half) - 1 downto 0),
           n_bits_minus_1 (ceil_log2(c_config.max_n_bits) - 1 downto 0),
@@ -121,39 +121,38 @@ architecture arch of tb_spi_master is
           n_clks_rx_sample_strobes_delay (ceil_log2(c_config.max_n_clks_rx_sample_strobes_delay + 1) - 1 downto 0)
         );
 
-  signal level : log_level_t := error; -- If this es equal to `warning`, tests don't fail on `error`.
+  signal level : log_level_t := error; -- If this is equal to `warning`, tests don't fail on `error`. See `python run.py --help`.
 
 begin
 
-  settings.scs_idle_state                 <= scs_idle_state;
-  settings.sclk_idle_state                <= sclk_idle_state;
-  settings.transmit_on_sclk_leading_edge  <= transmit_on_sclk_leading_edge;
-  settings.streaming_mode                 <= streaming_mode;
-  settings.sclk_divide_half_minus_1       <= to_unsigned(sclk_divide_half - 1, ceil_log2(c_config.max_sclk_divide_half));
-  settings.n_bits_minus_1                 <= to_unsigned(n_bits - 1, ceil_log2(c_config.max_n_bits));
-  settings.n_clks_scs_to_sclk_minus_1     <= to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(c_config.max_n_clks_scs_to_sclk));
-  settings.n_clks_sclk_to_scs_minus_1     <= to_unsigned(n_clks_sclk_to_scs - 1, ceil_log2(c_config.max_n_clks_sclk_to_scs));
-  settings.n_clks_sclk_to_le_minus_1      <= to_unsigned(n_clks_sclk_to_le - 1, ceil_log2(c_config.max_n_clks_sclk_to_le));
-  settings.n_clks_le_width_minus_1        <= to_unsigned(n_clks_le_width - 1, ceil_log2(c_config.max_n_clks_le_width));
-  settings.n_clks_rx_sample_strobes_delay <= to_unsigned(n_clks_rx_sample_strobes_delay, ceil_log2(c_config.max_n_clks_rx_sample_strobes_delay + 1));
+  i_settings.scs_idle_state                 <= scs_idle_state;
+  i_settings.sclk_idle_state                <= sclk_idle_state;
+  i_settings.transmit_on_sclk_leading_edge  <= transmit_on_sclk_leading_edge;
+  i_settings.sclk_divide_half_minus_1       <= to_unsigned(sclk_divide_half - 1, ceil_log2(c_config.max_sclk_divide_half));
+  i_settings.n_bits_minus_1                 <= to_unsigned(n_bits - 1, ceil_log2(c_config.max_n_bits));
+  i_settings.n_clks_scs_to_sclk_minus_1     <= to_unsigned(n_clks_scs_to_sclk - 1, ceil_log2(c_config.max_n_clks_scs_to_sclk));
+  i_settings.n_clks_sclk_to_scs_minus_1     <= to_unsigned(n_clks_sclk_to_scs - 1, ceil_log2(c_config.max_n_clks_sclk_to_scs));
+  i_settings.n_clks_sclk_to_le_minus_1      <= to_unsigned(n_clks_sclk_to_le - 1, ceil_log2(c_config.max_n_clks_sclk_to_le));
+  i_settings.n_clks_le_width_minus_1        <= to_unsigned(n_clks_le_width - 1, ceil_log2(c_config.max_n_clks_le_width));
+  i_settings.n_clks_rx_sample_strobes_delay <= to_unsigned(n_clks_rx_sample_strobes_delay, ceil_log2(c_config.max_n_clks_rx_sample_strobes_delay + 1));
 
   e_dut : entity spi_lib.spi_master(arch)
     generic map (
       g_config => c_config
     )
     port map (
-      i_clk             => clk,
-      i_start           => start,
-      o_busy            => busy,
-      o_ready           => ready,
-      i_keep_streaming  => keep_streaming,
-      o_streaming_start => streaming_start,
+      i_clk             => i_clk,
+      i_start           => i_start,
+      o_busy            => o_busy,
+      o_ready           => o_ready,
+      o_streaming_start => o_streaming_start,
+      i_streaming_start => i_streaming_start,
       --
-      i_d_to_peripheral               => d_to_peripheral,
-      o_d_from_peripheral             => d_from_peripheral,
+      i_d_to_peripheral               => i_d_to_peripheral,
+      o_d_from_peripheral             => o_d_from_peripheral,
       o_d_from_peripheral_read_strobe => o_d_from_peripheral_read_strobe,
       --
-      i_settings => settings,
+      i_settings => i_settings,
       --
       o_le                 => o_le,
       o_scs                => o_scs,
@@ -162,7 +161,7 @@ begin
       i_sd_from_peripheral => i_sd_from_peripheral
     );
 
-  CreateClock(clk, c_clk_period);
+  CreateClock(i_clk, c_clk_period);
 
   main : process is
 
@@ -181,7 +180,7 @@ begin
       level <= warning;
     end if;
 
-    WaitForClock(clk, 1);
+    WaitForClock(i_clk, 1);
     info("level = " & to_string(level));
 
     --
@@ -198,7 +197,7 @@ begin
     n_clks_le_width                <= c_config.max_n_clks_le_width;
     n_clks_rx_sample_strobes_delay <= c_config.max_n_clks_rx_sample_strobes_delay;
     --
-    WaitForClock(clk, 1);
+    WaitForClock(i_clk, 1);
     --
     info("-- begin init");
     info("scs_idle_state = " & to_string(scs_idle_state));
@@ -213,78 +212,78 @@ begin
     info("n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
     info("-- end init");
 
-    for k in d_to_peripheral'range loop
+    for k in i_d_to_peripheral'range loop
 
       if (k mod 2 = 0) then
-        d_to_peripheral(k) <= '0';
+        i_d_to_peripheral(k) <= '0';
       else
-        d_to_peripheral(k) <= '1';
+        i_d_to_peripheral(k) <= '1';
       end if;
 
     end loop;
 
-    WaitForClock(clk, 10);
+    WaitForClock(i_clk, 10);
 
-    info("d_to_peripheral = " & to_string(d_to_peripheral));
+    info("i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
     while test_suite loop
 
       if run("00_simple_case_for_debugging") then
         sclk_idle_state <= '0';
         scs_idle_state  <= '0';
-        WaitForClock(clk, 10);
+        WaitForClock(i_clk, 10);
 
-        start <= '1';
+        i_start <= '1';
 
-        WaitForClock(clk, 1);
-        start <= '0';
+        WaitForClock(i_clk, 1);
+        i_start <= '0';
 
-        WaitForClock(clk, 1);
-        check_equal(ready, '0', result("for ready"), level => level);
+        WaitForClock(i_clk, 1);
+        check_equal(o_ready, '0', result("for o_ready"), level => level);
 
-        wait until ready = '1';
+        wait until o_ready = '1';
       elsif run("01_all_sclk_scs_idle_cases") then
-        start <= '1';
+        i_start <= '1';
 
-        WaitForClock(clk, 1);
-        start <= '0';
+        WaitForClock(i_clk, 1);
+        i_start <= '0';
 
-        WaitForClock(clk, 1);
-        check_equal(ready, '0', result("for ready"), level => level);
+        WaitForClock(i_clk, 1);
+        check_equal(o_ready, '0', result("for o_ready"), level => level);
 
-        wait until rising_edge(ready);
+        wait until rising_edge(o_ready);
 
-        WaitForClock(clk, 2);
-        check_equal(ready, '0', result("for ready"), level => level);
+        WaitForClock(i_clk, 2);
+        check_equal(o_ready, '0', result("for o_ready"), level => level);
       elsif run("02_all_sclk_transmit_edge_cases") then
-        start <= '1';
+        i_start <= '1';
 
-        WaitForClock(clk, 1);
-        start <= '0';
+        WaitForClock(i_clk, 1);
+        i_start <= '0';
 
-        WaitForClock(clk, 1);
-        check_equal(ready, '0', result("for ready"), level => level);
+        WaitForClock(i_clk, 1);
+        check_equal(o_ready, '0', result("for o_ready"), level => level);
 
-        wait until ready = '1';
+        wait until o_ready = '1';
       elsif run("03_sclk_divide") then
 
         for divide_half in 1 to c_config.max_sclk_divide_half loop
 
           sclk_divide_half <= divide_half;
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
           info("sclk_divide_half = " & to_string(sclk_divide_half));
 
-          start <= '1';
+          i_start <= '1';
 
-          WaitForClock(clk, 1);
-          start <= '0';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          WaitForClock(clk, 1);
-          check_equal(ready, '0', result("for ready"), level => level);
+          WaitForClock(i_clk, 1);
+          check_equal(o_ready, '0', result("for o_ready"), level => level);
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -293,20 +292,20 @@ begin
         for bits in 1 to c_config.max_n_bits loop
 
           n_bits <= bits;
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
           info("n_bits = " & to_string(n_bits));
 
-          start <= '1';
+          i_start <= '1';
 
-          WaitForClock(clk, 1);
-          start <= '0';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          WaitForClock(clk, 1);
-          check_equal(ready, '0', result("for ready"), level => level);
+          WaitForClock(i_clk, 1);
+          check_equal(o_ready, '0', result("for o_ready"), level => level);
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -314,16 +313,16 @@ begin
 
         for k in 1 to 20 loop
 
-          d_to_peripheral <= RV.RandSlv(d_to_peripheral'length);
-          WaitForClock(clk, 1);
+          i_d_to_peripheral <= RV.RandSlv(i_d_to_peripheral'length);
+          WaitForClock(i_clk, 1);
 
-          start <= '1';
-          WaitForClock(clk, 1);
-          start <= '0';
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -333,15 +332,15 @@ begin
         for k in 1 to 20 loop
 
           d_from_peripheral_expected <= (others => '1');
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
 
-          start <= '1';
-          WaitForClock(clk, 1);
-          start <= '0';
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -350,15 +349,15 @@ begin
         for k in 1 to 20 loop
 
           d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
 
-          start <= '1';
-          WaitForClock(clk, 1);
-          start <= '0';
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -367,16 +366,16 @@ begin
         for clks_scs_to_sclk in 1 to c_config.max_n_clks_scs_to_sclk loop
 
           n_clks_scs_to_sclk <= clks_scs_to_sclk;
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
           info("n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
 
-          start <= '1';
-          WaitForClock(clk, 1);
-          start <= '0';
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -385,16 +384,16 @@ begin
         for clks_sclk_to_scs in 1 to c_config.max_n_clks_sclk_to_scs loop
 
           n_clks_sclk_to_scs <= clks_sclk_to_scs;
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
           info("n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
 
-          start <= '1';
-          WaitForClock(clk, 1);
-          start <= '0';
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -406,15 +405,15 @@ begin
           n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
           d_from_peripheral_expected     <= (others => '1');
 
-          WaitForClock(clk, 1);
-          start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '1';
 
-          WaitForClock(clk, 1);
-          start <= '0';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
@@ -423,37 +422,41 @@ begin
         for clks_rx_sample_strobes_delay in 0 to c_config.max_n_clks_rx_sample_strobes_delay loop
 
           d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
-          WaitForClock(clk, 1);
+          WaitForClock(i_clk, 1);
 
-          start <= '1';
-          WaitForClock(clk, 1);
-          start <= '0';
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
 
-          wait until ready = '1';
+          wait until o_ready = '1';
 
-          WaitForClock(clk, 5);
+          WaitForClock(i_clk, 5);
 
         end loop;
 
-      elsif run("10_streaming_mode") then
+      elsif run("10_streaming") then
         streaming_mode <= '1';
-        keep_streaming <= '1';
 
-        WaitForClock(clk, 1);
+        WaitForClock(i_clk, 1);
 
-        start <= '1';
-        WaitForClock(clk, 1);
-        start <= '0';
+        i_start <= '1';
+        WaitForClock(i_clk, 1);
+        i_start <= '0';
 
-        WaitForClock(clk, 100);
-        keep_streaming <= '0';
+        wait until falling_edge(o_streaming_start);
+        info("now");
+        i_streaming_start <= '1';
+        WaitForClock(i_clk, 1);
+        i_streaming_start <= '0';
 
-        WaitForClock(clk, 100);
+        WaitForClock(i_clk, 100);
+
+        WaitForClock(i_clk, 100);
       end if;
 
     end loop;
 
-    WaitForClock(clk, 10);
+    WaitForClock(i_clk, 10);
 
     test_runner_cleanup(runner);
     wait;
@@ -463,7 +466,7 @@ begin
   test_runner_watchdog(runner, 20 us);
 
   ---------------------------------------------------------------------------
-  -- check ready
+  -- check o_ready
   ---------------------------------------------------------------------------
 
   p_generate_ready_reference : process is
@@ -473,13 +476,13 @@ begin
 
   begin
 
-    wait until rising_edge(start);
+    wait until rising_edge(i_start);
     ready_reference <= '0';
 
     -- wait until o_sclk stops
-    WaitForClock(clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
+    WaitForClock(i_clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
-    -- wait until o_scs and o_le are ready
+    -- wait until o_scs and o_le are o_ready
     n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);      -- either o_scs inactive or o_le takes longer
 
     -- wait until the last sample has been sampled
@@ -489,12 +492,12 @@ begin
       n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
     end if;
 
-    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                -- +1 for sampling +1 for ready
+    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                -- +1 for sampling +1 for o_ready
 
-    WaitForClock(clk, n_wait);
+    WaitForClock(i_clk, n_wait);
     ready_reference <= '1';
 
-    WaitForClock(clk, 1);
+    WaitForClock(i_clk, 1);
     ready_reference <= '0';
 
   end process p_generate_ready_reference;
@@ -502,11 +505,11 @@ begin
   p_check_ready : process is
   begin
 
-    wait on ready, ready_reference;
+    wait on o_ready, ready_reference;
     wait for 0 fs;
 
     if (streaming_mode = '0') then
-      check_equal(ready, ready_reference, "ready is not equal to ready_reference.", level => level);
+      check_equal(o_ready, ready_reference, "o_ready is not equal to ready_reference.", level => level);
     end if;
 
   end process p_check_ready;
@@ -518,17 +521,17 @@ begin
   p_generate_sclk_reference : process is
   begin
 
-    wait until rising_edge(start);
+    wait until rising_edge(i_start);
     sclk_reference <= sclk_idle_state;
 
-    wait until falling_edge(start);
-    WaitForClock(clk, 1);
-    WaitForClock(clk, n_clks_scs_to_sclk);
+    wait until falling_edge(i_start);
+    WaitForClock(i_clk, 1);
+    WaitForClock(i_clk, n_clks_scs_to_sclk);
     sclk_reference <= not sclk_reference;
 
     for k in 1 to 2 * n_bits - 1 loop
 
-      WaitForClock(clk, sclk_divide_half);
+      WaitForClock(i_clk, sclk_divide_half);
       sclk_reference <= not sclk_reference;
 
     end loop;
@@ -538,11 +541,11 @@ begin
   p_check_sclk : process is
   begin
 
-    wait until falling_edge(start);
+    wait until falling_edge(i_start);
 
-    while not rising_edge(ready) loop
+    while not rising_edge(o_ready) loop
 
-      wait on ready, o_sclk, sclk_reference;
+      wait on o_ready, o_sclk, sclk_reference;
       wait for 0 fs;
 
       if (streaming_mode = '0') then
@@ -560,14 +563,14 @@ begin
   p_generate_scs_reference : process is
   begin
 
-    wait until rising_edge(start);
+    wait until rising_edge(i_start);
     scs_reference <= scs_idle_state;
 
-    wait until falling_edge(start);
-    WaitForClock(clk, 1); -- due to output register
+    wait until falling_edge(i_start);
+    WaitForClock(i_clk, 1); -- due to output register
     scs_reference <= not scs_idle_state;
 
-    WaitForClock(clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_scs);
+    WaitForClock(i_clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_scs);
     scs_reference <= scs_idle_state;
 
   end process p_generate_scs_reference;
@@ -575,9 +578,9 @@ begin
   p_check_scs : process is
   begin
 
-    wait until start = '1';
+    wait until i_start = '1';
 
-    while not ready = '1' loop
+    while not o_ready = '1' loop
 
       wait on o_scs, scs_reference;
       wait for 0 fs;
@@ -597,14 +600,14 @@ begin
   p_generate_le_reference : process is
   begin
 
-    wait until falling_edge(start);
-    WaitForClock(clk, 1); -- due to output register
+    wait until falling_edge(i_start);
+    WaitForClock(i_clk, 1); -- due to output register
     le_reference <= '0';
 
-    WaitForClock(clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_le);
+    WaitForClock(i_clk, n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half + n_clks_sclk_to_le);
     le_reference <= '1';
 
-    WaitForClock(clk, n_clks_le_width);
+    WaitForClock(i_clk, n_clks_le_width);
     le_reference <= '0';
 
   end process p_generate_le_reference;
@@ -612,9 +615,9 @@ begin
   p_check_le : process is
   begin
 
-    wait until start = '1';
+    wait until i_start = '1';
 
-    while not ready = '1' loop
+    while not o_ready = '1' loop
 
       wait on o_le, le_reference;
       wait for 0 fs;
@@ -634,16 +637,16 @@ begin
   p_check_data_to_peripheral : process is
   begin
 
-    wait until start = '1';
+    wait until i_start = '1';
 
-    for n in d_to_peripheral'left downto d_to_peripheral'left - n_bits + 1 loop
+    for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
 
       if (transmit_on_sclk_leading_edge = '1') then
         wait_until_sclk_leading_edge(o_sclk, sclk_idle_state);
-        check_equal(o_sd_to_peripheral, d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
+        check_equal(o_sd_to_peripheral, i_d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
       else
         wait_until_sclk_trailing_edge(o_sclk, sclk_idle_state);
-        check_equal(o_sd_to_peripheral, d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
+        check_equal(o_sd_to_peripheral, i_d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
       end if;
 
     end loop;
@@ -653,22 +656,22 @@ begin
   p_generate_sd_from_peripheral : process is
   begin
 
-    wait until start = '1';
+    wait until i_start = '1';
 
     i_sd_from_peripheral <= '0';
 
     wait on o_sclk;
 
-    WaitForClock(clk, n_clks_rx_sample_strobes_delay);
+    WaitForClock(i_clk, n_clks_rx_sample_strobes_delay);
 
     for n in d_from_peripheral_expected'range loop
 
       i_sd_from_peripheral <= d_from_peripheral_expected(n);
 
-      WaitForClock(clk, 1);
+      WaitForClock(i_clk, 1);
       i_sd_from_peripheral <= '0';
 
-      WaitForClock(clk, 2 * sclk_divide_half - 1);
+      WaitForClock(i_clk, 2 * sclk_divide_half - 1);
 
     end loop;
 
@@ -678,7 +681,7 @@ begin
   begin
 
     wait until o_d_from_peripheral_read_strobe = '1';
-    check_equal(d_from_peripheral, d_from_peripheral_expected, result("for d_from_peripheral"), level => level);
+    check_equal(o_d_from_peripheral, d_from_peripheral_expected, result("for o_d_from_peripheral"), level => level);
 
   end process p_check_data_from_peripheral;
 

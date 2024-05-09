@@ -1,3 +1,8 @@
+---------------------------------------------------------------------------
+-- For a description of the generics and ports to configure `spi_master`,
+-- read the comments in `spi_package`.
+---------------------------------------------------------------------------
+
 library ieee;
   use ieee.math_real.all;
   use ieee.numeric_std.all;
@@ -16,8 +21,8 @@ entity spi_master is
     i_start           : in    std_ulogic := '0';
     o_busy            : out   std_ulogic := '0';
     o_ready           : out   std_ulogic := '0';
-    i_keep_streaming  : in    std_ulogic := '0';
     o_streaming_start : out   std_ulogic := '0';
+    i_streaming_start : in    std_ulogic := '0';
     -- data
     i_d_to_peripheral               : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
     o_d_from_peripheral             : out   std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
@@ -69,23 +74,20 @@ architecture arch of spi_master is
   signal scs_state : t_scs_fsm_state := inactive;
   signal sclk_done : std_ulogic      := '0';
 
+  signal streaming_state : t_streaming_state := idle;
+  signal keep_streaming  : std_ulogic        := '0';
+
   signal le : std_ulogic := '0';
 
-  signal busy               : std_ulogic                                                  := '0';
-  signal ready              : std_ulogic                                                  := '0';
-  signal sclk_start         : std_ulogic                                                  := '1';
-  signal reset_sclk         : std_ulogic                                                  := '1';
-  signal reset_sclk_delayed : std_ulogic                                                  := '1';
-  signal reset_sclk_sreg    : std_ulogic_vector(g_config.max_n_clks_scs_to_sclk downto 1) := (others => '0');
-
-  signal streaming_start : std_ulogic := '0';
+  signal busy  : std_ulogic := '0';
+  signal ready : std_ulogic := '0';
 
   -- sampled control
-  signal start          : std_ulogic := '0';
-  signal keep_streaming : std_ulogic := '0';
+  signal start               : std_ulogic := '0';
+  signal streaming_start_out : std_ulogic := '0';
+  signal streaming_start_in  : std_ulogic := '0';
 
   -- sampled settings
-  signal streaming_mode                 : std_ulogic                                                     := '0';
   signal sclk_divide_half_minus_1_2g    : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
   signal transmit_on_sclk_leading_edge  : std_ulogic                                                     := '1';
   signal n_clks_sclk_to_scs_minus_1     : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1         := 0;
@@ -94,11 +96,14 @@ architecture arch of spi_master is
   signal n_clks_rx_sample_strobes_delay : natural range 0 to g_config.max_n_clks_rx_sample_strobes_delay := 0;
   signal n_clks_scs_to_sclk_minus_1     : natural range 0 to g_config.max_n_clks_scs_to_sclk - 1         := 0;
 
+  signal n_bits_minus_1 : unsigned(ceil_log2(g_config.max_n_bits) - 1 downto 0);
+
   -- data
-  signal d_to_peripheral        : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal d_from_peripheral      : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal sd_from_peripheral_reg : std_ulogic                                          := '0';
-  signal sdo_reg                : std_ulogic                                          := '0';
+  signal d_to_peripheral           : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal d_to_peripheral_streaming : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal d_from_peripheral         : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal sd_from_peripheral_reg    : std_ulogic                                          := '0';
+  signal sdo_reg                   : std_ulogic                                          := '0';
 
 begin
 
@@ -114,7 +119,6 @@ begin
 
     if rising_edge(i_clk) then
       if (start = '1') then
-        streaming_mode                 <= i_settings.streaming_mode;
         transmit_on_sclk_leading_edge  <= i_settings.transmit_on_sclk_leading_edge;
         sclk_divide_half_minus_1_2g    <= to_integer(i_settings.sclk_divide_half_minus_1);
         n_clks_sclk_to_scs_minus_1     <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
@@ -122,6 +126,7 @@ begin
         n_clks_le_width_minus_1        <= to_integer(i_settings.n_clks_le_width_minus_1);
         n_clks_rx_sample_strobes_delay <= to_integer(i_settings.n_clks_rx_sample_strobes_delay);
         n_clks_scs_to_sclk_minus_1     <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
+        n_bits_minus_1                 <= i_settings.n_bits_minus_1;
       end if;
     end if;
 
@@ -136,13 +141,13 @@ begin
 
   end process p_input_register;
 
-  keep_streaming <= i_keep_streaming;
+  streaming_start_in <= i_streaming_start;
 
   ---------------------------------------------------------------------------
   -- handle out-ports
   ---------------------------------------------------------------------------
 
-  o_streaming_start <= streaming_start;
+  o_streaming_start <= streaming_start_out;
 
   o_d_from_peripheral <= d_from_peripheral;
 
@@ -171,7 +176,6 @@ begin
   ---------------------------------------------------------------------------
 
   p_fsm : process (i_clk) is
-  -- variable counter_n_clks_scs_to_sclk : integer range 0 to g_config.max_n_clks_scs_to_sclk - 1 := 0;
   begin
 
     if rising_edge(i_clk) then
@@ -188,7 +192,7 @@ begin
 
         when wait_scs_and_le_and_sample_sdi =>
 
-          if (counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0) then
+          if (sclk_done = '1' and counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0) then
             ready <= '1';
             state <= idle;
           end if;
@@ -277,6 +281,48 @@ begin
   end process p_generate_le;
 
   ---------------------------------------------------------------------------
+  -- Streaming FSM.
+  ---------------------------------------------------------------------------
+
+  p_streaming_fsm : process (i_clk) is
+  begin
+
+    if rising_edge(i_clk) then
+
+      case streaming_state is
+
+        when detect_streaming =>
+
+          if (streaming_start_in) then
+            streaming_state <= streaming;
+          else
+            keep_streaming  <= '0';
+            streaming_state <= idle;
+          end if;
+
+        when streaming =>
+
+          if (streaming_start_out) then
+            streaming_state <= detect_streaming;
+          end if;
+
+        when others => -- idle
+
+          if (start) then
+            keep_streaming <= '1';
+          end if;
+
+          if (streaming_start_out and keep_streaming) then
+            streaming_state <= detect_streaming;
+          end if;
+
+      end case;
+
+    end if;
+
+  end process p_streaming_fsm;
+
+  ---------------------------------------------------------------------------
   -- Generate SCS.
   ---------------------------------------------------------------------------
 
@@ -329,6 +375,7 @@ begin
   begin
 
     if rising_edge(i_clk) then
+      streaming_start_out <= '0';
 
       case sclk_state is
 
@@ -343,9 +390,15 @@ begin
             sclk_internal_edge <= '1';
 
             counter_n_sclk_edges <= counter_n_sclk_edges - 1;
-            if (counter_n_sclk_edges = 1) then
-              sclk_state := inactive;
-              sclk_done  <= '1';
+            if (keep_streaming) then
+              if (counter_n_sclk_edges = 1) then
+                counter_n_sclk_edges <= to_integer(n_bits_minus_1 & '1');
+              end if;
+            else
+              if (counter_n_sclk_edges = 1) then
+                sclk_state := inactive;
+                sclk_done  <= '1';
+              end if;
             end if;
           else
             counter_clk_divide <= counter_clk_divide - 1;
@@ -366,9 +419,10 @@ begin
 
           if (start_came) then
             if (counter_n_clks_scs_to_sclk = 0) then
-              counter_clk_divide <= sclk_divide_half_minus_1;
-              sclk_internal      <= not sclk_internal;
-              sclk_internal_edge <= '1';
+              counter_clk_divide  <= sclk_divide_half_minus_1;
+              sclk_internal       <= not sclk_internal;
+              sclk_internal_edge  <= '1';
+              streaming_start_out <= '1';
 
               -- `counter_n_sclk_edges` counts 2 * n_bits sclk edges:
               --    from 2 * n_bits - 1 downto 0
