@@ -479,8 +479,8 @@ begin
     -- wait until o_sclk stops
     WaitForClock(clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
-    -- wait until o_scs and LE are ready
-    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);      -- either o_scs inactive or LE takes longer
+    -- wait until o_scs and o_le are ready
+    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);      -- either o_scs inactive or o_le takes longer
 
     -- wait until the last sample has been sampled
     if (transmit_on_sclk_leading_edge = '1') then                                    -- receive on o_sclk away from idle state

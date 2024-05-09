@@ -45,17 +45,14 @@ architecture arch of spi_master is
 
   signal counter_clk_divide         : natural range 0 to g_config.max_sclk_divide_half - 1   := 0;
   signal counter_n_sclk_edges       : natural range 0 to 2 * g_config.max_n_bits - 1         := 2 * g_config.max_n_bits - 1;
-  signal counter_n_sclk_edges2g     : natural range 0 to 2 * g_config.max_n_bits - 1         := 2 * g_config.max_n_bits - 1;
   signal counter_n_clks_sclk_to_scs : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1 := g_config.max_n_clks_sclk_to_scs - 1;
-  -- signal counter_n_clks_scs_to_sclk : natural range 0 to g_config.max_n_clks_scs_to_sclk - 1 := g_config.max_n_clks_scs_to_sclk - 1;
-  signal counter_n_clks_sclk_to_le : natural range 0 to g_config.max_n_clks_sclk_to_le - 1 := g_config.max_n_clks_sclk_to_le - 1;
-  signal counter_n_clks_le_width   : natural range 0 to g_config.max_n_clks_le_width - 1   := g_config.max_n_clks_le_width - 1;
-  signal counter_n_sample_sdi      : natural range 0 to g_config.max_n_bits                := g_config.max_n_bits;
+  signal counter_n_clks_sclk_to_le  : natural range 0 to g_config.max_n_clks_sclk_to_le - 1  := g_config.max_n_clks_sclk_to_le - 1;
+  signal counter_n_clks_le_width    : natural range 0 to g_config.max_n_clks_le_width - 1    := g_config.max_n_clks_le_width - 1;
+  signal counter_n_sample_sdi       : natural range 0 to g_config.max_n_bits                 := g_config.max_n_bits;
 
   signal sclk_internal      : std_ulogic := '0';
   signal sclk_internal_reg1 : std_ulogic := '1';
   signal sclk_internal_reg2 : std_ulogic := '1';
-  signal sclk_stop          : std_ulogic := '0';
   signal scs                : std_ulogic := '1';
 
   signal sclk_internal_edge             : std_ulogic                                                              := '0';
@@ -72,15 +69,14 @@ architecture arch of spi_master is
   signal scs_state : t_scs_fsm_state := inactive;
   signal sclk_done : std_ulogic      := '0';
 
-  signal le        : std_ulogic := '0';
-  signal enable_le : std_ulogic := '0';
+  signal le : std_ulogic := '0';
 
-  signal busy               : std_ulogic                                                   := '0';
-  signal ready              : std_ulogic                                                   := '0';
-  signal sclk_start         : std_ulogic                                                   := '1';
-  signal reset_sclk         : std_ulogic                                                   := '1';
-  signal reset_sclk_delayed : std_ulogic                                                   := '1';
-  signal reset_sclk_sreg    : std_ulogic_vector(g_config.max_n_clks_sclk_to_scs  downto 1) := (others => '0');
+  signal busy               : std_ulogic                                                  := '0';
+  signal ready              : std_ulogic                                                  := '0';
+  signal sclk_start         : std_ulogic                                                  := '1';
+  signal reset_sclk         : std_ulogic                                                  := '1';
+  signal reset_sclk_delayed : std_ulogic                                                  := '1';
+  signal reset_sclk_sreg    : std_ulogic_vector(g_config.max_n_clks_scs_to_sclk downto 1) := (others => '0');
 
   signal streaming_start : std_ulogic := '0';
 
@@ -184,102 +180,28 @@ begin
 
         when wait_sclk =>
 
-          -- if (counter_n_clks_scs_to_sclk = 1) then
-          -- if (counter_n_clks_scs_to_sclk = 0) then
-          --  reset_sclk <= '0';
-          --  state      <= trx;
-          -- else
-          --  -- counter_n_clks_scs_to_sclk <= counter_n_clks_scs_to_sclk - 1;
-          --  counter_n_clks_scs_to_sclk := counter_n_clks_scs_to_sclk - 1;
-          -- end if;
           state <= trx;
 
         when trx =>
 
-          streaming_start <= '0';
-          if (counter_n_sclk_edges2g = 0) then
-            if (counter_clk_divide = 0) then
-              streaming_start        <= '1';
-              counter_n_sclk_edges2g <= to_integer(i_settings.n_bits_minus_1 & '1');
-              if not(streaming_mode = '1' and keep_streaming = '1') then
-                reset_sclk <= '1';
-                sclk_stop  <= '1';
-                state      <= wait_scs_and_le_and_sample_sdi;
-              end if;
-            -- counter_n_clks_sclk_to_scs <= n_clks_sclk_to_scs_minus_1;
-            -- counter_n_clks_sclk_to_le <= n_clks_sclk_to_le_minus_1;
-            -- counter_n_clks_le_width <= n_clks_le_width_minus_1;
-            end if;
-          else
-            if (counter_clk_divide = 0) then
-              counter_n_sclk_edges2g <= counter_n_sclk_edges2g - 1;
-            end if;
-          end if;
+          state <= wait_scs_and_le_and_sample_sdi;
 
         when wait_scs_and_le_and_sample_sdi =>
-
-          sclk_stop <= '0';
-
-          -- if (counter_n_clks_sclk_to_scs = 0) then
-          ---- scs <= i_settings.scs_idle_state;
-          -- else
-          --  counter_n_clks_sclk_to_scs <= counter_n_clks_sclk_to_scs - 1;
-          -- end if;
-
-          if (enable_le = '1') then
-            if (counter_n_clks_sclk_to_le = 0) then
-              -- le        <= '1';
-              enable_le <= '0';
-            else
-            -- counter_n_clks_sclk_to_le <= counter_n_clks_sclk_to_le - 1;
-            end if;
-          end if;
-
-          if (le = '1') then
-            if (counter_n_clks_le_width = 0) then
-            -- le <= '0';
-            else
-            -- counter_n_clks_le_width <= counter_n_clks_le_width - 1;
-            end if;
-          end if;
 
           if (counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0) then
             ready <= '1';
             state <= idle;
           end if;
 
-        when others =>                                                                                          -- idle
+        when others =>  -- idle
 
           busy  <= '0';
           ready <= '0';
 
-          -- make in-port change visible at out-port without the need of a start strobe
-          -- scs <= i_settings.scs_idle_state;
-
           if (start) then
-            -- `counter_n_sclk_edges2g` counts 2 * n_bits sclk edges:
-            --    from 2 * n_bits - 1 downto 0
-            --    <=> from 2 * (n_bits - 1) + 1 downto 0
-            counter_n_sclk_edges2g <= to_integer(i_settings.n_bits_minus_1 & '1');
-            --
-            -- counter_n_clks_scs_to_sclk <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
-            -- counter_n_clks_scs_to_sclk := to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
-            -- scs <= not i_settings.scs_idle_state;
-            --
-            enable_le <= '1';
-            --
             busy <= '1';
 
-            reset_sclk <= '0';
-
-            -- if (i_settings.n_clks_scs_to_sclk_minus_1 = 0) then
-            -- if (counter_n_clks_scs_to_sclk = 0) then
-            --  -- reset_sclk <= '0';
-            --  state <= trx;
-            -- else
-            -- counter_n_clks_scs_to_sclk := counter_n_clks_scs_to_sclk - 1;
             state <= wait_sclk;
-          -- end if;
           end if;
 
       end case;
@@ -292,7 +214,7 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (start = '1') then -- or streaming_start = '1') then
+      if (start = '1') then
         counter_n_sample_sdi <= to_integer(i_settings.n_bits_minus_1) + 1;
       else
         if (sample_sdi = '1') then
@@ -323,9 +245,8 @@ begin
         when wait_until_active =>
 
           if (counter_n_clks_sclk_to_le = 0) then
-            le                      <= '1';
-            counter_n_clks_le_width <= n_clks_le_width_minus_1;
-            le_state                <= active;
+            le       <= '1';
+            le_state <= active;
           else
             counter_n_clks_sclk_to_le <= counter_n_clks_sclk_to_le - 1;
           end if;
@@ -345,6 +266,7 @@ begin
 
           if (start) then
             counter_n_clks_sclk_to_le <= to_integer(i_settings.n_clks_sclk_to_le_minus_1);
+            counter_n_clks_le_width   <= to_integer(i_settings.n_clks_le_width_minus_1);
             le_state                  <= wait_until_sclk_done;
           end if;
 
@@ -396,42 +318,6 @@ begin
   ---------------------------------------------------------------------------
   -- Generate SCLK.
   ---------------------------------------------------------------------------
-
-  p_reset_sclk_delayed : process (all) is
-  begin
-
-    if (n_clks_scs_to_sclk_minus_1 = 0) then
-      sclk_start         <= start;
-      reset_sclk_delayed <= reset_sclk;
-    else
-      reset_sclk_delayed <= reset_sclk_sreg(n_clks_scs_to_sclk_minus_1);
-    end if;
-
-  end process p_reset_sclk_delayed;
-
-  generate_reset_sclk_delayed : if g_config.max_n_clks_scs_to_sclk = 1 generate
-
-    p_delay_reset_sclk : process (i_clk) is
-    begin
-
-      if rising_edge(i_clk) then
-        reset_sclk_sreg(1) <= reset_sclk;
-      end if;
-
-    end process p_delay_reset_sclk;
-
-  else generate
-
-    p_delay_reset_sclk : process (i_clk) is
-    begin
-
-      if rising_edge(i_clk) then
-        reset_sclk_sreg <= reset_sclk_sreg(reset_sclk_sreg'left - 1 downto reset_sclk_sreg'right) & reset_sclk;
-      end if;
-
-    end process p_delay_reset_sclk;
-
-  end generate generate_reset_sclk_delayed;
 
   p_generate_sclk : process (i_clk) is
 
@@ -602,7 +488,6 @@ begin
     if rising_edge(i_clk) then
       -- This edge is one clock cycle before the edge we want to use to sample sdi.
       sclk_internal_leading_edge_reg <= sclk_internal_leading_edge;
-
       -- So it needs to be delayed at least once more.
       sample_sdi_sreg <= sample_sdi_sreg(sample_sdi_sreg'left - 1 downto 0) & sclk_internal_leading_edge_reg;
       sample_sdi      <= sample_sdi_sreg(n_clks_rx_sample_strobes_delay);
