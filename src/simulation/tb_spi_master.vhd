@@ -77,9 +77,10 @@ architecture arch of tb_spi_master is
 
   signal o_d_from_peripheral             : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal d_from_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal n_d_from_peripheral_expected    : integer                                             := 1;
+  signal n_trx_loops                     : integer                                             := 1;
   signal d_from_peripheral_expected_old  : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal o_d_from_peripheral_read_strobe : std_ulogic                                          := '0';
+  signal o_d_to_peripheral_read_strobe   : std_ulogic                                          := '0';
   signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
   signal check_o_d_from_peripheral  : std_ulogic := '0';
@@ -128,6 +129,8 @@ architecture arch of tb_spi_master is
 
   signal level : log_level_t := error; -- If this is equal to `warning`, tests don't fail on `error`. See `python run.py --help`.
 
+  shared variable rv : RandomPType;
+
 begin
 
   i_settings.scs_idle_state                 <= scs_idle_state;
@@ -156,6 +159,7 @@ begin
       i_d_to_peripheral               => i_d_to_peripheral,
       o_d_from_peripheral             => o_d_from_peripheral,
       o_d_from_peripheral_read_strobe => o_d_from_peripheral_read_strobe,
+      o_d_to_peripheral_read_strobe   => o_d_to_peripheral_read_strobe,
       --
       i_settings => i_settings,
       --
@@ -169,16 +173,14 @@ begin
   CreateClock(i_clk, c_clk_period);
 
   main : process is
-
-    variable rv : RandomPType;
-
+  -- variable rv : RandomPType;
   begin
 
     test_runner_setup(runner, runner_cfg);
 
     set_stop_level(default_logger, failure);
 
-    RV.InitSeed(g_rng_seed);
+    rv.InitSeed(g_rng_seed);
     info("g_rng_seed = " & to_string(g_rng_seed));
 
     if (g_warning) then
@@ -318,7 +320,7 @@ begin
 
         for k in 1 to 20 loop
 
-          i_d_to_peripheral <= RV.RandSlv(i_d_to_peripheral'length);
+          i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -336,7 +338,7 @@ begin
 
         for k in 1 to 20 loop
 
-          d_from_peripheral_expected <= (others => '1');
+          -- d_from_peripheral_expected <= (others => '1');
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -353,7 +355,7 @@ begin
 
         for k in 1 to 20 loop
 
-          d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
+          -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -408,7 +410,7 @@ begin
         for clks_rx_sample_strobes_delay in 0 to 0 loop -- c_config.max_n_clks_rx_sample_strobes_delay loop
 
           n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
-          d_from_peripheral_expected     <= (others => '1');
+          -- d_from_peripheral_expected     <= (others => '1');
 
           WaitForClock(i_clk, 1);
           i_start <= '1';
@@ -426,7 +428,7 @@ begin
 
         for clks_rx_sample_strobes_delay in 0 to c_config.max_n_clks_rx_sample_strobes_delay loop
 
-          d_from_peripheral_expected <= RV.RandSlv(d_from_peripheral_expected'length);
+          -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -440,13 +442,16 @@ begin
         end loop;
 
       elsif run("10_streaming") then
-        sclk_divide_half <= 2;
-        streaming_mode   <= '1';
-        i_keep_streaming <= '1';
+        transmit_on_sclk_leading_edge <= '1';
+        sclk_divide_half              <= 2;
+        streaming_mode                <= '1';
+        i_keep_streaming              <= '1';
 
-        d_from_peripheral_expected   <= (others => '1');
-        n_d_from_peripheral_expected <= 4;
-        info("n_d_from_peripheral_expected = " & to_string(n_d_from_peripheral_expected));
+        i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+        -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
+
+        n_trx_loops <= 4;
+        info("n_trx_loops = " & to_string(n_trx_loops));
 
         WaitForClock(i_clk, 1);
 
@@ -454,18 +459,18 @@ begin
         WaitForClock(i_clk, 1);
         i_start <= '0';
 
-        for k in 1 to n_d_from_peripheral_expected - 2 loop
+        for k in 1 to n_trx_loops - 2 loop
 
           wait until rising_edge(o_streaming_start);
-          d_from_peripheral_expected    <= (others => '1');
-          d_from_peripheral_expected(k) <= '0';
+          i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+        -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
 
         end loop;
 
         wait until rising_edge(o_streaming_start);
-        d_from_peripheral_expected    <= (others => '1');
-        d_from_peripheral_expected(0) <= '0';
-        i_keep_streaming              <= '0';
+        i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+        -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
+        i_keep_streaming <= '0';
 
         WaitForClock(i_clk, 30);
       end if;
@@ -655,15 +660,21 @@ begin
 
     wait until i_start = '1';
 
-    for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
+    for k in 1 to n_trx_loops loop
 
-      if (transmit_on_sclk_leading_edge = '1') then
-        wait_until_sclk_leading_edge(o_sclk, sclk_idle_state);
-        check_equal(o_sd_to_peripheral, i_d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
-      else
-        wait_until_sclk_trailing_edge(o_sclk, sclk_idle_state);
-        check_equal(o_sd_to_peripheral, i_d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
-      end if;
+      info(" -- i_d_to_peripheral = " & to_string(i_d_to_peripheral));
+
+      for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
+
+        if (transmit_on_sclk_leading_edge = '1') then
+          wait_until_sclk_leading_edge(o_sclk, sclk_idle_state);
+          check_equal(o_sd_to_peripheral, i_d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
+        else
+          wait_until_sclk_trailing_edge(o_sclk, sclk_idle_state);
+          check_equal(o_sd_to_peripheral, i_d_to_peripheral(n), result("for o_sd_to_peripheral (n = " & to_string(n) & ")"), level => level);
+        end if;
+
+      end loop;
 
     end loop;
 
@@ -672,7 +683,10 @@ begin
   p_generate_sd_from_peripheral : process is
   begin
 
-    wait until i_start = '1';
+    wait until rising_edge(i_start);
+
+    d_from_peripheral_expected                      <= (others => '0');
+    d_from_peripheral_expected(n_bits - 1 downto 0) <= rv.RandSlv(n_bits);
 
     i_sd_from_peripheral <= '0';
 
@@ -680,11 +694,11 @@ begin
 
     WaitForClock(i_clk, n_clks_rx_sample_strobes_delay);
 
-    for k in 1 to n_d_from_peripheral_expected loop
+    for k in 1 to n_trx_loops loop
 
-      info("send bits " & to_string(d_from_peripheral_expected));
+      info("  d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
 
-      for n in d_from_peripheral_expected'range loop
+      for n in n_bits - 1 downto 0 loop
 
         i_sd_from_peripheral <= d_from_peripheral_expected(n);
 
@@ -694,6 +708,9 @@ begin
         WaitForClock(i_clk, 2 * sclk_divide_half - 1);
 
       end loop;
+
+      d_from_peripheral_expected                      <= (others => '0');
+      d_from_peripheral_expected(n_bits - 1 downto 0) <= rv.RandSlv(n_bits);
 
     end loop;
 
@@ -742,7 +759,7 @@ begin
   begin
 
     wait until o_ready = '1';
-    check_equal(n_checks_d_from_peripheral, n_d_from_peripheral_expected);
+    check_equal(n_checks_d_from_peripheral, n_trx_loops, level => level);
 
   end process p_check_n_checks;
 

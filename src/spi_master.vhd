@@ -27,6 +27,7 @@ entity spi_master is
     i_d_to_peripheral               : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
     o_d_from_peripheral             : out   std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
     o_d_from_peripheral_read_strobe : out   std_ulogic                                          := '0'; -- use this to sample o_d_from_peripheral
+    o_d_to_peripheral_read_strobe   : out   std_ulogic                                          := '0';
     -- settings
     i_settings : in    t_settings(
       sclk_divide_half_minus_1 (ceil_log2(g_config.max_sclk_divide_half) - 1 downto 0),
@@ -54,6 +55,7 @@ architecture arch of spi_master is
   signal counter_n_clks_sclk_to_le  : natural range 0 to g_config.max_n_clks_sclk_to_le - 1  := g_config.max_n_clks_sclk_to_le - 1;
   signal counter_n_clks_le_width    : natural range 0 to g_config.max_n_clks_le_width - 1    := g_config.max_n_clks_le_width - 1;
   signal counter_n_sample_sdi       : natural range 0 to g_config.max_n_bits                 := g_config.max_n_bits;
+  signal counter_n_sample_sdo       : natural range 0 to g_config.max_n_bits                 := g_config.max_n_bits;
 
   signal sclk_internal      : std_ulogic := '0';
   signal sclk_internal_reg1 : std_ulogic := '1';
@@ -70,6 +72,8 @@ architecture arch of spi_master is
   signal sample_sdi_read                : std_ulogic                                                              := '0';
   signal sample_sdi_done                : std_ulogic                                                              := '0';
   signal sample_sdo                     : std_ulogic                                                              := '0';
+  signal sample_sdo_reg                 : std_ulogic                                                              := '0';
+  signal sample_sdo_read                : std_ulogic                                                              := '0';
 
   signal state     : t_state         := idle;
   signal le_state  : t_le_fsm_state  := idle;
@@ -147,7 +151,8 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (start or streaming_start_out) then
+      -- if (start or streaming_start_out) then
+      if (start or sample_sdo_read) then
         keep_streaming <= i_keep_streaming;
       end if;
     end if;
@@ -160,9 +165,20 @@ begin
 
   o_streaming_start <= streaming_start_out;
 
-  o_d_from_peripheral <= d_from_peripheral;
+  p : process (i_clk) is
+  begin
 
-  o_d_from_peripheral_read_strobe <= sample_sdi_read;
+    if rising_edge(i_clk) then
+      o_d_from_peripheral_read_strobe <= sample_sdi_read;
+
+      if (sample_sdi_read) then
+        o_d_from_peripheral <= d_from_peripheral;
+      end if;
+    end if;
+
+  end process p;
+
+  o_d_to_peripheral_read_strobe <= sample_sdo_read;
 
   o_busy  <= busy;
   o_ready <= ready;
@@ -239,6 +255,8 @@ begin
           end if;
         end if;
       end if;
+
+      sample_sdi_reg <= sample_sdi;
     end if;
 
   end process p_count_sample_sdi_strobes;
@@ -364,6 +382,10 @@ begin
             sclk_internal      <= not sclk_internal;
             sclk_internal_edge <= '1';
 
+            -- if (counter_n_sclk_edges = 1) then
+            --  streaming_start_out <= '1';
+            -- end if;
+
             if (counter_n_sclk_edges = 0) then
               counter_n_sclk_edges <= to_integer(n_bits_minus_1 & '1');
               streaming_start_out  <= '1';
@@ -487,6 +509,30 @@ begin
 
   end generate generate_sample_sdo;
 
+  p_count_sample_sdo_strobes : process (i_clk) is
+  begin
+
+    if rising_edge(i_clk) then
+      if (start = '1') then
+        counter_n_sample_sdo <= 0;
+      else
+        if (sample_sdo = '1') then
+          if (counter_n_sample_sdo = 0) then
+            counter_n_sample_sdo <= to_integer(i_settings.n_bits_minus_1);
+          else
+            counter_n_sample_sdo <= counter_n_sample_sdo - 1;
+          end if;
+        end if;
+      end if;
+
+      sample_sdo_reg <= sample_sdo;
+
+      sample_sdo_read <= sample_sdo_reg when counter_n_sample_sdo = 0 else
+                         '0';
+    end if;
+
+  end process p_count_sample_sdo_strobes;
+
   ---------------------------------------------------------------------------
   -- Sample the data going to the peripheral.
   ---------------------------------------------------------------------------
@@ -495,7 +541,7 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (start or streaming_start_out) then
+      if (start or sample_sdo_read) then
         d_to_peripheral <= i_d_to_peripheral;
       else
         if (sample_sdo) then
@@ -521,8 +567,6 @@ begin
       -- So it needs to be delayed at least once more.
       sample_sdi_sreg <= sample_sdi_sreg(sample_sdi_sreg'left - 1 downto 0) & sclk_internal_leading_edge_reg;
       sample_sdi      <= sample_sdi_sreg(n_clks_rx_sample_strobes_delay);
-
-      sample_sdi_reg <= sample_sdi;
     end if;
 
   end process p_delay_sample_sdi;
@@ -535,8 +579,12 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (sample_sdi) then
-        d_from_peripheral <= d_from_peripheral(d_from_peripheral'left - 1 downto 0) & sd_from_peripheral_reg;
+      if (start or sample_sdi_read) then
+        d_from_peripheral <= (others => '0');
+      else
+        if (sample_sdi) then
+          d_from_peripheral <= d_from_peripheral(d_from_peripheral'left - 1 downto 0) & sd_from_peripheral_reg;
+        end if;
       end if;
     end if;
 
