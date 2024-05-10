@@ -75,20 +75,25 @@ architecture arch of tb_spi_master is
 
   signal i_clk : std_ulogic := '0';
 
-  signal o_d_from_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal o_d_from_peripheral             : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal d_from_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal n_d_from_peripheral_expected    : integer                                             := 1;
+  signal d_from_peripheral_expected_old  : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal o_d_from_peripheral_read_strobe : std_ulogic                                          := '0';
-  signal i_d_to_peripheral                 : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
-  signal i_start                : std_ulogic := '0';
+  signal check_o_d_from_peripheral  : std_ulogic := '0';
+  signal n_checks_d_from_peripheral : integer    := 0;
+
+  signal i_start              : std_ulogic := '0';
   signal i_sd_from_peripheral : std_ulogic := '0';
   signal o_sd_to_peripheral   : std_ulogic := '0';
 
   signal o_streaming_start : std_ulogic := '0';
-  signal i_keep_streaming : std_ulogic := '0';
+  signal i_keep_streaming  : std_ulogic := '0';
 
-  signal o_busy            : std_ulogic := '0';
-  signal o_ready           : std_ulogic := '0';
+  signal o_busy          : std_ulogic := '0';
+  signal o_ready         : std_ulogic := '0';
   signal ready_reference : std_ulogic := '0';
   signal o_sclk          : std_ulogic := '0';
   signal sclk_reference  : std_ulogic := '0';
@@ -146,7 +151,7 @@ begin
       o_busy            => o_busy,
       o_ready           => o_ready,
       o_streaming_start => o_streaming_start,
-      i_keep_streaming => i_keep_streaming,
+      i_keep_streaming  => i_keep_streaming,
       --
       i_d_to_peripheral               => i_d_to_peripheral,
       o_d_from_peripheral             => o_d_from_peripheral,
@@ -436,8 +441,12 @@ begin
 
       elsif run("10_streaming") then
         sclk_divide_half <= 2;
-        streaming_mode <= '1';
+        streaming_mode   <= '1';
         i_keep_streaming <= '1';
+
+        d_from_peripheral_expected   <= (others => '1');
+        n_d_from_peripheral_expected <= 4;
+        info("n_d_from_peripheral_expected = " & to_string(n_d_from_peripheral_expected));
 
         WaitForClock(i_clk, 1);
 
@@ -445,13 +454,20 @@ begin
         WaitForClock(i_clk, 1);
         i_start <= '0';
 
-        wait until falling_edge(o_streaming_start);
+        for k in 1 to n_d_from_peripheral_expected - 2 loop
 
-        i_keep_streaming <= '0';
+          wait until rising_edge(o_streaming_start);
+          d_from_peripheral_expected    <= (others => '1');
+          d_from_peripheral_expected(k) <= '0';
 
-        WaitForClock(i_clk, 100);
+        end loop;
 
-        WaitForClock(i_clk, 100);
+        wait until rising_edge(o_streaming_start);
+        d_from_peripheral_expected    <= (others => '1');
+        d_from_peripheral_expected(0) <= '0';
+        i_keep_streaming              <= '0';
+
+        WaitForClock(i_clk, 30);
       end if;
 
     end loop;
@@ -483,16 +499,16 @@ begin
     WaitForClock(i_clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
     -- wait until o_scs and o_le are o_ready
-    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);      -- either o_scs inactive or o_le takes longer
+    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);        -- either o_scs inactive or o_le takes longer
 
     -- wait until the last sample has been sampled
-    if (transmit_on_sclk_leading_edge = '1') then                                    -- receive on o_sclk away from idle state
+    if (transmit_on_sclk_leading_edge = '1') then                                      -- receive on o_sclk away from idle state
       n_wait_sample_sdi := n_clks_rx_sample_strobes_delay - sclk_divide_half;
     else
       n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
     end if;
 
-    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                -- +1 for sampling +1 for o_ready
+    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                  -- +1 for sampling +1 for o_ready
 
     WaitForClock(i_clk, n_wait);
     ready_reference <= '1';
@@ -664,26 +680,71 @@ begin
 
     WaitForClock(i_clk, n_clks_rx_sample_strobes_delay);
 
-    for n in d_from_peripheral_expected'range loop
+    for k in 1 to n_d_from_peripheral_expected loop
 
-      i_sd_from_peripheral <= d_from_peripheral_expected(n);
+      info("send bits " & to_string(d_from_peripheral_expected));
 
-      WaitForClock(i_clk, 1);
-      i_sd_from_peripheral <= '0';
+      for n in d_from_peripheral_expected'range loop
 
-      WaitForClock(i_clk, 2 * sclk_divide_half - 1);
+        i_sd_from_peripheral <= d_from_peripheral_expected(n);
+
+        WaitForClock(i_clk, 1);
+        i_sd_from_peripheral <= '0';
+
+        WaitForClock(i_clk, 2 * sclk_divide_half - 1);
+
+      end loop;
 
     end loop;
 
   end process p_generate_sd_from_peripheral;
 
-  p_check_data_from_peripheral : process is
+  d_from_peripheral_expected_old <= transport d_from_peripheral_expected after 3 * c_clk_period;
+
+  -- This is how a module receiving from `spi_master` is supposed to use the two out ports.
+  p_check_data_from_peripheral : process (i_clk) is
   begin
 
-    wait until o_d_from_peripheral_read_strobe = '1';
-    check_equal(o_d_from_peripheral, d_from_peripheral_expected, result("for o_d_from_peripheral"), level => level);
+    if rising_edge(i_clk) then
+      check_o_d_from_peripheral <= '0';
+
+      if (o_d_from_peripheral_read_strobe) then
+        check_equal(o_d_from_peripheral, d_from_peripheral_expected_old, result("for o_d_from_peripheral"), level => level);
+        check_o_d_from_peripheral <= '1';
+      end if;
+    end if;
 
   end process p_check_data_from_peripheral;
+
+  ---------------------------------------------------------------------------
+  -- Check if enough checks have been made.
+  ---------------------------------------------------------------------------
+
+  p_count_checks : process is
+  begin
+
+    wait until i_start = '1';
+    n_checks_d_from_peripheral <= 0;
+
+    while not o_ready loop
+
+      wait on check_o_d_from_peripheral, o_ready;
+
+      if (check_o_d_from_peripheral) then
+        n_checks_d_from_peripheral <= n_checks_d_from_peripheral + 1;
+      end if;
+
+    end loop;
+
+  end process p_count_checks;
+
+  p_check_n_checks : process is
+  begin
+
+    wait until o_ready = '1';
+    check_equal(n_checks_d_from_peripheral, n_d_from_peripheral_expected);
+
+  end process p_check_n_checks;
 
 end architecture arch;
 

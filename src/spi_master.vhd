@@ -143,7 +143,16 @@ begin
 
   end process p_input_register;
 
-  keep_streaming <= i_keep_streaming;
+  p_keep_streaming : process (i_clk) is
+  begin
+
+    if rising_edge(i_clk) then
+      if (start or streaming_start_out) then
+        keep_streaming <= i_keep_streaming;
+      end if;
+    end if;
+
+  end process p_keep_streaming;
 
   ---------------------------------------------------------------------------
   -- handle out-ports
@@ -193,7 +202,7 @@ begin
 
         when wait_scs_and_le_and_sample_sdi =>
 
-          if (sclk_done = '1' and counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and sample_sdi_done = '1') then -- counter_n_sample_sdi = 0) then
+          if (sclk_done = '1' and counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0) then
             ready <= '1';
             state <= idle;
           end if;
@@ -219,18 +228,13 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (start = '1' or sample_sdi_read = '1') then
-        counter_n_sample_sdi <= to_integer(i_settings.n_bits_minus_1) + 1;
+      if (start = '1') then
+        counter_n_sample_sdi <= 0;
       else
         if (sample_sdi = '1') then
           if (counter_n_sample_sdi = 0) then
-            counter_n_sample_sdi <= 0;
+            counter_n_sample_sdi <= to_integer(i_settings.n_bits_minus_1);
           else
-            if (counter_n_sample_sdi = 1) then
-              sample_sdi_done <= '1';
-            else
-              sample_sdi_done <= '0';
-            end if;
             counter_n_sample_sdi <= counter_n_sample_sdi - 1;
           end if;
         end if;
@@ -292,48 +296,6 @@ begin
     end if;
 
   end process p_generate_le;
-
-  ---------------------------------------------------------------------------
-  -- Streaming FSM.
-  ---------------------------------------------------------------------------
-
-  -- p_streaming_fsm : process (i_clk) is
-  -- begin
-
-  --  if rising_edge(i_clk) then
-
-  --    case streaming_state is
-
-  --      when detect_streaming =>
-
-  --        if (streaming_start_in) then
-  --          streaming_state <= streaming;
-  --        else
-  --          keep_streaming  <= '0';
-  --          streaming_state <= idle;
-  --        end if;
-
-  --      when streaming =>
-
-  --        if (streaming_start_out) then
-  --          streaming_state <= detect_streaming;
-  --        end if;
-
-  --      when others => -- idle
-
-  --        if (start) then
-  --          keep_streaming <= '1';
-  --        end if;
-
-  --        if (streaming_start_out and keep_streaming) then
-  --          streaming_state <= detect_streaming;
-  --        end if;
-
-  --    end case;
-
-  --  end if;
-
-  -- end process p_streaming_fsm;
 
   ---------------------------------------------------------------------------
   -- Generate SCS.
@@ -437,7 +399,6 @@ begin
               counter_clk_divide <= sclk_divide_half_minus_1;
               sclk_internal      <= not sclk_internal;
               sclk_internal_edge <= '1';
-              -- streaming_start_out  <= '1';
 
               -- `counter_n_sclk_edges` counts 2 * n_bits sclk edges:
               --    from 2 * n_bits - 1 downto 0
@@ -534,7 +495,7 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      if (start) then
+      if (start or streaming_start_out) then
         d_to_peripheral <= i_d_to_peripheral;
       else
         if (sample_sdo) then
