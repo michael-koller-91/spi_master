@@ -82,6 +82,7 @@ architecture arch of tb_spi_master is
   signal o_d_from_peripheral_read_strobe : std_ulogic                                          := '0';
   signal o_d_to_peripheral_read_strobe   : std_ulogic                                          := '0';
   signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal i_d_to_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
   signal check_o_d_from_peripheral  : std_ulogic := '0';
   signal n_checks_d_from_peripheral : integer    := 0;
@@ -229,7 +230,9 @@ begin
 
     end loop;
 
-    WaitForClock(i_clk, 10);
+    WaitForClock(i_clk, 5);
+    i_d_to_peripheral_expected <= i_d_to_peripheral;
+    WaitForClock(i_clk, 5);
 
     info("i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
@@ -451,9 +454,10 @@ begin
         -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
 
         n_trx_loops <= 4;
-        info("n_trx_loops = " & to_string(n_trx_loops));
 
         WaitForClock(i_clk, 1);
+        info("n_trx_loops = " & to_string(n_trx_loops));
+        info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
 
         i_start <= '1';
         WaitForClock(i_clk, 1);
@@ -461,16 +465,26 @@ begin
 
         for k in 1 to n_trx_loops - 2 loop
 
-          wait until rising_edge(o_streaming_start);
-          i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
-        -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
+          wait until rising_edge(o_d_to_peripheral_read_strobe);
+          i_d_to_peripheral_expected <= i_d_to_peripheral;
+          i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
+          WaitForClock(i_clk, 1);
+          info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
+          -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
+
+          if (k = n_trx_loops - 2) then
+            i_keep_streaming <= '0';
+          end if;
 
         end loop;
 
-        wait until rising_edge(o_streaming_start);
-        i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+        wait until rising_edge(o_d_to_peripheral_read_strobe);
+        i_d_to_peripheral_expected <= i_d_to_peripheral;
+        i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
+        WaitForClock(i_clk, 1);
+        info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
         -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
-        i_keep_streaming <= '0';
+        -- i_keep_streaming <= '0';
 
         WaitForClock(i_clk, 30);
       end if;
@@ -662,7 +676,7 @@ begin
 
     for k in 1 to n_trx_loops loop
 
-      info(" -- i_d_to_peripheral = " & to_string(i_d_to_peripheral));
+      info("  -> i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
       for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
 
@@ -696,7 +710,7 @@ begin
 
     for k in 1 to n_trx_loops loop
 
-      info("  d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
+      info("  <- d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
 
       for n in n_bits - 1 downto 0 loop
 
@@ -705,18 +719,24 @@ begin
         WaitForClock(i_clk, 1);
         i_sd_from_peripheral <= '0';
 
-        WaitForClock(i_clk, 2 * sclk_divide_half - 1);
+        if (n > 0) then
+          WaitForClock(i_clk, 2 * sclk_divide_half - 1);
+        else
+          -- This allows `d_from_peripheral_expected` to be updated early enough for the next round.
+          WaitForClock(i_clk, 2 * sclk_divide_half - 2);
+        end if;
 
       end loop;
 
       d_from_peripheral_expected                      <= (others => '0');
       d_from_peripheral_expected(n_bits - 1 downto 0) <= rv.RandSlv(n_bits);
+      WaitForClock(i_clk, 1);
 
     end loop;
 
   end process p_generate_sd_from_peripheral;
 
-  d_from_peripheral_expected_old <= transport d_from_peripheral_expected after 3 * c_clk_period;
+  d_from_peripheral_expected_old <= transport d_from_peripheral_expected after 4 * c_clk_period;
 
   -- This is how a module receiving from `spi_master` is supposed to use the two out ports.
   p_check_data_from_peripheral : process (i_clk) is

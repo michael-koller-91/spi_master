@@ -179,6 +179,7 @@ begin
   end process p;
 
   o_d_to_peripheral_read_strobe <= sample_sdo_read;
+  -- o_d_to_peripheral_read_strobe <= sample_sdo_read and keep_streaming;
 
   o_busy  <= busy;
   o_ready <= ready;
