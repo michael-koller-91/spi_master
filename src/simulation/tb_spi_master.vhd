@@ -16,7 +16,7 @@ library spi_lib;
 entity tb_spi_master is
   generic (
     runner_cfg                           : string;
-    g_rng_seed                           : integer    := 2;
+    g_rng_seed                           : integer    := 34125;
     g_warning                            : boolean    := false;
     g_sclk_idle_state                    : std_ulogic := '1';
     g_scs_idle_state                     : std_ulogic := '1';
@@ -220,21 +220,21 @@ begin
     info("n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
     info("-- end init");
 
-    for k in i_d_to_peripheral'range loop
+    -- for k in i_d_to_peripheral'range loop
 
-      if (k mod 2 = 0) then
-        i_d_to_peripheral(k) <= '0';
-      else
-        i_d_to_peripheral(k) <= '1';
-      end if;
+    --  if (k mod 2 = 0) then
+    --    i_d_to_peripheral(k) <= '0';
+    --  else
+    --    i_d_to_peripheral(k) <= '1';
+    --  end if;
 
-    end loop;
+    -- end loop;
 
-    WaitForClock(i_clk, 5);
-    i_d_to_peripheral_expected <= i_d_to_peripheral;
-    WaitForClock(i_clk, 5);
+    -- WaitForClock(i_clk, 5);
+    -- i_d_to_peripheral_expected <= i_d_to_peripheral;
+    -- WaitForClock(i_clk, 5);
 
-    info("i_d_to_peripheral = " & to_string(i_d_to_peripheral));
+    -- info("i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
     while test_suite loop
 
@@ -323,7 +323,7 @@ begin
 
         for k in 1 to 20 loop
 
-          i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+          -- i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -450,14 +450,14 @@ begin
         streaming_mode                <= '1';
         i_keep_streaming              <= '1';
 
-        i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+        -- i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
         -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
 
         n_trx_loops <= 4;
 
         WaitForClock(i_clk, 1);
         info("n_trx_loops = " & to_string(n_trx_loops));
-        info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
+        --info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
 
         i_start <= '1';
         WaitForClock(i_clk, 1);
@@ -467,9 +467,9 @@ begin
 
           wait until rising_edge(o_d_to_peripheral_read_strobe);
           i_d_to_peripheral_expected <= i_d_to_peripheral;
-          i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
+          -- i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
           WaitForClock(i_clk, 1);
-          info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
+          --info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
           -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
 
           if (k = n_trx_loops - 2) then
@@ -480,9 +480,9 @@ begin
 
         wait until rising_edge(o_d_to_peripheral_read_strobe);
         i_d_to_peripheral_expected <= i_d_to_peripheral;
-        i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
+        -- i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
         WaitForClock(i_clk, 1);
-        info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
+        --info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
         -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
         -- i_keep_streaming <= '0';
 
@@ -527,7 +527,7 @@ begin
       n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
     end if;
 
-    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                  -- +1 for sampling +1 for o_ready
+    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                  -- +1 for sampling, +1 for o_ready
 
     WaitForClock(i_clk, n_wait);
     ready_reference <= '1';
@@ -560,7 +560,7 @@ begin
     sclk_reference <= sclk_idle_state;
 
     wait until falling_edge(i_start);
-    WaitForClock(i_clk, 1);
+    WaitForClock(i_clk, 1); -- scs goes active one clock after start, sclk goes active at least 1 clock after that
     WaitForClock(i_clk, n_clks_scs_to_sclk);
     sclk_reference <= not sclk_reference;
 
@@ -672,7 +672,10 @@ begin
   p_check_data_to_peripheral : process is
   begin
 
-    wait until i_start = '1';
+    wait until rising_edge(i_start);
+
+    i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+    wait for 1 ps;
 
     for k in 1 to n_trx_loops loop
 
@@ -704,6 +707,7 @@ begin
 
     i_sd_from_peripheral <= '0';
 
+    wait until falling_edge(i_start);
     wait on o_sclk;
 
     WaitForClock(i_clk, n_clks_rx_sample_strobes_delay);
