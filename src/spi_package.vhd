@@ -106,8 +106,6 @@ package spi_package is
 
   type t_le_fsm_state is (idle, wait_until_sclk_done, wait_until_active, active);
 
-  type t_streaming_state is (idle, detect_streaming, streaming);
-
   -- How many bits are needed to represent `value` values?
 
   function ceil_log2 (

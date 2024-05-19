@@ -70,7 +70,6 @@ architecture arch of spi_master is
   signal sample_sdi                     : std_ulogic                                                              := '0';
   signal sample_sdi_reg                 : std_ulogic                                                              := '0';
   signal sample_sdi_read                : std_ulogic                                                              := '0';
-  signal sample_sdi_done                : std_ulogic                                                              := '0';
   signal sample_sdo                     : std_ulogic                                                              := '0';
   signal sample_sdo_reg                 : std_ulogic                                                              := '0';
   signal sample_sdo_read                : std_ulogic                                                              := '0';
@@ -80,7 +79,6 @@ architecture arch of spi_master is
   signal scs_state : t_scs_fsm_state := inactive;
   signal sclk_done : std_ulogic      := '0';
 
-  signal streaming_state : t_streaming_state := idle;
   signal keep_streaming  : std_ulogic        := '0';
 
   signal le : std_ulogic := '0';
@@ -91,7 +89,6 @@ architecture arch of spi_master is
   -- sampled control
   signal start               : std_ulogic := '0';
   signal streaming_start_out : std_ulogic := '0';
-  signal streaming_start_in  : std_ulogic := '0';
 
   -- sampled settings
   signal sclk_divide_half_minus_1_2g    : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
@@ -106,7 +103,6 @@ architecture arch of spi_master is
 
   -- data
   signal d_to_peripheral           : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal d_to_peripheral_streaming : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
   signal d_from_peripheral         : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
   signal sd_from_peripheral_reg    : std_ulogic                                          := '0';
   signal sdo_reg                   : std_ulogic                                          := '0';

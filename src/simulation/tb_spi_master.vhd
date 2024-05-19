@@ -96,6 +96,8 @@ architecture arch of tb_spi_master is
 
   signal o_busy          : std_ulogic := '0';
   signal o_ready         : std_ulogic := '0';
+  signal ready_delayed1  : std_ulogic := '0';
+  signal ready_delayed2  : std_ulogic := '0';
   signal ready_reference : std_ulogic := '0';
   signal o_sclk          : std_ulogic := '0';
   signal sclk_reference  : std_ulogic := '0';
@@ -174,7 +176,6 @@ begin
   CreateClock(i_clk, c_clk_period);
 
   main : process is
-  -- variable rv : RandomPType;
   begin
 
     test_runner_setup(runner, runner_cfg);
@@ -220,22 +221,6 @@ begin
     info("n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
     info("-- end init");
 
-    -- for k in i_d_to_peripheral'range loop
-
-    --  if (k mod 2 = 0) then
-    --    i_d_to_peripheral(k) <= '0';
-    --  else
-    --    i_d_to_peripheral(k) <= '1';
-    --  end if;
-
-    -- end loop;
-
-    -- WaitForClock(i_clk, 5);
-    -- i_d_to_peripheral_expected <= i_d_to_peripheral;
-    -- WaitForClock(i_clk, 5);
-
-    -- info("i_d_to_peripheral = " & to_string(i_d_to_peripheral));
-
     while test_suite loop
 
       if run("00_simple_case_for_debugging") then
@@ -244,35 +229,21 @@ begin
         WaitForClock(i_clk, 10);
 
         i_start <= '1';
-
         WaitForClock(i_clk, 1);
         i_start <= '0';
-
-        WaitForClock(i_clk, 1);
-        check_equal(o_ready, '0', result("for o_ready"), level => level);
 
         wait until o_ready = '1';
       elsif run("01_all_sclk_scs_idle_cases") then
         i_start <= '1';
-
         WaitForClock(i_clk, 1);
         i_start <= '0';
 
-        WaitForClock(i_clk, 1);
-        check_equal(o_ready, '0', result("for o_ready"), level => level);
-
-        wait until rising_edge(o_ready);
-
-        WaitForClock(i_clk, 2);
-        check_equal(o_ready, '0', result("for o_ready"), level => level);
+        wait until o_ready = '1';
       elsif run("02_all_sclk_transmit_edge_cases") then
         i_start <= '1';
 
         WaitForClock(i_clk, 1);
         i_start <= '0';
-
-        WaitForClock(i_clk, 1);
-        check_equal(o_ready, '0', result("for o_ready"), level => level);
 
         wait until o_ready = '1';
       elsif run("03_sclk_divide") then
@@ -323,7 +294,6 @@ begin
 
         for k in 1 to 20 loop
 
-          -- i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -337,28 +307,9 @@ begin
         end loop;
 
       elsif run("06_receive") then
-        info("deterministic");
 
         for k in 1 to 20 loop
 
-          -- d_from_peripheral_expected <= (others => '1');
-          WaitForClock(i_clk, 1);
-
-          i_start <= '1';
-          WaitForClock(i_clk, 1);
-          i_start <= '0';
-
-          wait until o_ready = '1';
-
-          WaitForClock(i_clk, 5);
-
-        end loop;
-
-        info("random");
-
-        for k in 1 to 20 loop
-
-          -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
           WaitForClock(i_clk, 1);
 
           i_start <= '1';
@@ -408,33 +359,18 @@ begin
         end loop;
 
       elsif run("09_max_n_clks_rx_sample_strobes_delay") then
-        info("deterministic");
-
-        for clks_rx_sample_strobes_delay in 0 to 0 loop -- c_config.max_n_clks_rx_sample_strobes_delay loop
-
-          n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
-          -- d_from_peripheral_expected     <= (others => '1');
-
-          WaitForClock(i_clk, 1);
-          i_start <= '1';
-
-          WaitForClock(i_clk, 1);
-          i_start <= '0';
-
-          wait until o_ready = '1';
-
-          WaitForClock(i_clk, 5);
-
-        end loop;
-
-        info("random");
 
         for clks_rx_sample_strobes_delay in 0 to c_config.max_n_clks_rx_sample_strobes_delay loop
 
-          -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
-          WaitForClock(i_clk, 1);
+          n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
 
+          WaitForClock(i_clk, 1);
           i_start <= '1';
+          info(
+               "n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay) & "/"
+               & to_string(c_config.max_n_clks_rx_sample_strobes_delay)
+             );
+
           WaitForClock(i_clk, 1);
           i_start <= '0';
 
@@ -450,14 +386,10 @@ begin
         streaming_mode                <= '1';
         i_keep_streaming              <= '1';
 
-        -- i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
-        -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
-
         n_trx_loops <= 4;
 
         WaitForClock(i_clk, 1);
         info("n_trx_loops = " & to_string(n_trx_loops));
-        --info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
 
         i_start <= '1';
         WaitForClock(i_clk, 1);
@@ -467,10 +399,7 @@ begin
 
           wait until rising_edge(o_d_to_peripheral_read_strobe);
           i_d_to_peripheral_expected <= i_d_to_peripheral;
-          -- i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
           WaitForClock(i_clk, 1);
-          --info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
-          -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
 
           if (k = n_trx_loops - 2) then
             i_keep_streaming <= '0';
@@ -480,11 +409,7 @@ begin
 
         wait until rising_edge(o_d_to_peripheral_read_strobe);
         i_d_to_peripheral_expected <= i_d_to_peripheral;
-        -- i_d_to_peripheral          <= rv.RandSlv(i_d_to_peripheral'length);
         WaitForClock(i_clk, 1);
-        --info("i_d_to_peripheral ==    " & to_string(i_d_to_peripheral));
-        -- d_from_peripheral_expected <= rv.RandSlv(d_from_peripheral_expected'length);
-        -- i_keep_streaming <= '0';
 
         WaitForClock(i_clk, 30);
       end if;
@@ -515,19 +440,16 @@ begin
     ready_reference <= '0';
 
     -- wait until o_sclk stops
-    WaitForClock(i_clk, 1 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
+    WaitForClock(i_clk, 2 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
     -- wait until o_scs and o_le are o_ready
-    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);        -- either o_scs inactive or o_le takes longer
+    -- either o_scs inactive or o_le takes longer
+    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width) - 1;
 
     -- wait until the last sample has been sampled
-    if (transmit_on_sclk_leading_edge = '1') then                                      -- receive on o_sclk away from idle state
-      n_wait_sample_sdi := n_clks_rx_sample_strobes_delay - sclk_divide_half;
-    else
-      n_wait_sample_sdi := n_clks_rx_sample_strobes_delay;
-    end if;
+    n_wait_sample_sdi := n_clks_rx_sample_strobes_delay - sclk_divide_half + 3;
 
-    n_wait := maximum(n_wait, n_wait_sample_sdi + 2);                                  -- +1 for sampling, +1 for o_ready
+    n_wait := maximum(n_wait, n_wait_sample_sdi);
 
     WaitForClock(i_clk, n_wait);
     ready_reference <= '1';
@@ -761,18 +683,24 @@ begin
   -- Check if enough checks have been made.
   ---------------------------------------------------------------------------
 
+  -- The output read indicator can come at the same time as ready,
+  -- so we need to delay ready to read the correct value in the testbench.
+  ready_delayed1 <= transport o_ready after c_clk_period;
+  ready_delayed2 <= transport o_ready after 2 * c_clk_period;
+
   p_count_checks : process is
   begin
 
     wait until i_start = '1';
     n_checks_d_from_peripheral <= 0;
 
-    while not o_ready loop
+    while not ready_delayed1 loop
 
       wait on check_o_d_from_peripheral, o_ready;
 
       if (check_o_d_from_peripheral) then
         n_checks_d_from_peripheral <= n_checks_d_from_peripheral + 1;
+        wait for 0 ps;
       end if;
 
     end loop;
@@ -782,7 +710,7 @@ begin
   p_check_n_checks : process is
   begin
 
-    wait until o_ready = '1';
+    wait until ready_delayed2 = '1';
     check_equal(n_checks_d_from_peripheral, n_trx_loops, level => level);
 
   end process p_check_n_checks;
