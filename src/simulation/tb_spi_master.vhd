@@ -16,19 +16,19 @@ library spi_lib;
 entity tb_spi_master is
   generic (
     runner_cfg                           : string;
-    g_rng_seed                           : integer    := 34125;
+    g_rng_seed                           : integer    := 34128;
     g_warning                            : boolean    := false;
     g_sclk_idle_state                    : std_ulogic := '1';
     g_scs_idle_state                     : std_ulogic := '1';
     g_transmit_on_sclk_leading_edge      : std_ulogic := '1';
     g_max_n_clks_scs_to_sclk             : positive   := 3;
     g_max_n_clks_sclk_to_scs             : positive   := 5;
-    g_max_n_bits                         : positive   := 4;
-    g_max_sclk_divide_half               : positive   := 4;
+    g_max_n_bits                         : positive   := 7;
+    g_max_sclk_divide_half               : positive   := 8;
     g_max_n_clks_sclk_to_le              : positive   := 2;
     g_max_n_clks_le_width                : positive   := 3;
-    g_max_n_clks_rx_sample_strobes_delay : natural    := 0;
-    g_watchdog_timeout                   : time       := 20 us
+    g_max_n_clks_rx_sample_strobes_delay : natural    := 1;
+    g_watchdog_timeout                   : time       := 50 us
   );
 end entity tb_spi_master;
 
@@ -309,7 +309,7 @@ begin
 
           wait until o_ready = '1';
 
-          WaitForClock(i_clk, 5);
+          WaitForClock(i_clk, 2 * g_max_sclk_divide_half);
 
         end loop;
 
@@ -325,7 +325,7 @@ begin
 
           wait until o_ready = '1';
 
-          WaitForClock(i_clk, 5);
+          WaitForClock(i_clk, 2 * g_max_sclk_divide_half);
 
         end loop;
 
@@ -361,7 +361,7 @@ begin
 
           wait until o_ready = '1';
 
-          WaitForClock(i_clk, 5);
+          WaitForClock(i_clk, 2 * g_max_sclk_divide_half);
 
         end loop;
 
@@ -380,7 +380,7 @@ begin
 
           wait until o_ready = '1';
 
-          WaitForClock(i_clk, 5);
+          WaitForClock(i_clk, 2 * g_max_sclk_divide_half);
 
         end loop;
 
@@ -417,7 +417,6 @@ begin
 
         WaitForClock(i_clk, 30);
       elsif run("11_coverage_deterministic") then
-
         counter_coverage := 0;
 
         for divide_half in 1 to c_config.max_sclk_divide_half loop
@@ -461,7 +460,7 @@ begin
 
                       wait until o_ready = '1';
 
-                      WaitForClock(i_clk, 5);
+                      WaitForClock(i_clk, 2 * g_max_sclk_divide_half);
 
                     end loop;
 
@@ -481,6 +480,32 @@ begin
         info("n_checks_d_to_peripheral_total = " & to_string(n_checks_d_to_peripheral_total));
         check_equal(n_checks_d_from_peripheral_total, counter_coverage, "The number of d_from_peripheral checks is not as expected.");
         check_equal(n_checks_d_to_peripheral_total, counter_coverage, "The number of d_to_peripheral checks is not as expected.");
+      elsif run("12_coverage_deterministic_subset") then
+        sclk_divide_half               <= c_config.max_sclk_divide_half;
+        n_bits                         <= c_config.max_n_bits;
+        n_clks_scs_to_sclk             <= c_config.max_n_clks_scs_to_sclk;
+        n_clks_sclk_to_scs             <= c_config.max_n_clks_sclk_to_scs;
+        n_clks_sclk_to_le              <= c_config.max_n_clks_sclk_to_le;
+        n_clks_rx_sample_strobes_delay <= c_config.max_n_clks_rx_sample_strobes_delay;
+        n_clks_le_width                <= c_config.max_n_clks_le_width;
+
+        WaitForClock(i_clk, 1);
+
+        info("    sclk_divide_half = " & to_string(sclk_divide_half));
+        info("    n_bits = " & to_string(n_bits));
+        info("    n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
+        info("    n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+        info("    n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+        info("    n_clks_le_width = " & to_string(n_clks_le_width));
+        info("    n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
+
+        i_start <= '1';
+        WaitForClock(i_clk, 1);
+        i_start <= '0';
+
+        wait until o_ready = '1';
+
+        WaitForClock(i_clk, 5);
       end if;
 
     end loop;

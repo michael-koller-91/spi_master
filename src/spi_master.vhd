@@ -74,6 +74,7 @@ architecture arch of spi_master is
   signal sample_sdi      : std_ulogic                                                              := '0';
   signal sample_sdi_reg  : std_ulogic                                                              := '0';
   signal sample_sdi_read : std_ulogic                                                              := '0';
+  signal sample_sdi_done : std_ulogic                                                              := '0';
   signal sample_sdo      : std_ulogic                                                              := '0';
   signal sample_sdo_reg  : std_ulogic                                                              := '0';
   signal sample_sdo_read : std_ulogic                                                              := '0';
@@ -164,7 +165,7 @@ begin
 
   o_streaming_start <= streaming_start_out;
 
-  p : process (i_clk) is
+  p_peripheral_read : process (i_clk) is
   begin
 
     if rising_edge(i_clk) then
@@ -175,7 +176,7 @@ begin
       end if;
     end if;
 
-  end process p;
+  end process p_peripheral_read;
 
   o_d_to_peripheral_read_strobe <= sample_sdo_read;
   -- o_d_to_peripheral_read_strobe <= sample_sdo_read and keep_streaming;
@@ -218,7 +219,7 @@ begin
 
         when wait_scs_and_le_and_sample_sdi =>
 
-          if (sclk_done = '1' and scs_done = '1' and le_done = '1' and counter_n_sample_sdi = 0) then
+          if (sclk_done = '1' and scs_done = '1' and le_done = '1' and sample_sdi_done = '1') then
             ready <= '1';
             state <= idle;
           end if;
@@ -263,6 +264,17 @@ begin
 
   sample_sdi_read <= sample_sdi_reg when counter_n_sample_sdi = 0 else
                      '0';
+
+  p_sample_sdi_done : process (all) is
+  begin
+
+    if (counter_n_sample_sdi = 0 and sample_sdi_reg = '1') then
+      sample_sdi_done <= '1';
+    elsif (start) then
+      sample_sdi_done <= '0';
+    end if;
+
+  end process p_sample_sdi_done;
 
   ---------------------------------------------------------------------------
   -- Generate LE.

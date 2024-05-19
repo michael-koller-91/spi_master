@@ -153,7 +153,7 @@ for n_clks in [0, 1, 2, 3, 10]:
     )
 
 test = tb.test("11_coverage_deterministic")
-timeout = "20 ms"
+timeout = "40 ms"
 counter = 0
 divide_halfs = [8]
 bitss = [7]
