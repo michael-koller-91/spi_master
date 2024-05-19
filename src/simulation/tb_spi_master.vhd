@@ -27,7 +27,8 @@ entity tb_spi_master is
     g_max_sclk_divide_half               : positive   := 4;
     g_max_n_clks_sclk_to_le              : positive   := 2;
     g_max_n_clks_le_width                : positive   := 3;
-    g_max_n_clks_rx_sample_strobes_delay : natural    := 0
+    g_max_n_clks_rx_sample_strobes_delay : natural    := 0;
+    g_watchdog_timeout                   : time       := 20 us
   );
 end entity tb_spi_master;
 
@@ -84,8 +85,10 @@ architecture arch of tb_spi_master is
   signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal i_d_to_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
-  signal check_o_d_from_peripheral  : std_ulogic := '0';
-  signal n_checks_d_from_peripheral : integer    := 0;
+  signal check_o_d_from_peripheral        : std_ulogic := '0';
+  signal n_checks_d_from_peripheral       : integer    := 0;
+  signal n_checks_d_from_peripheral_total : integer    := 0;
+  signal n_checks_d_to_peripheral_total   : integer    := 0;
 
   signal i_start              : std_ulogic := '0';
   signal i_sd_from_peripheral : std_ulogic := '0';
@@ -176,9 +179,13 @@ begin
   CreateClock(i_clk, c_clk_period);
 
   main : process is
+
+    variable counter_coverage : integer := 0;
+
   begin
 
     test_runner_setup(runner, runner_cfg);
+    info("g_watchdog_timeout = " & to_string(g_watchdog_timeout));
 
     set_stop_level(default_logger, failure);
 
@@ -365,12 +372,9 @@ begin
           n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
 
           WaitForClock(i_clk, 1);
-          i_start <= '1';
-          info(
-               "n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay) & "/"
-               & to_string(c_config.max_n_clks_rx_sample_strobes_delay)
-             );
+          info("n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
 
+          i_start <= '1';
           WaitForClock(i_clk, 1);
           i_start <= '0';
 
@@ -412,6 +416,71 @@ begin
         WaitForClock(i_clk, 1);
 
         WaitForClock(i_clk, 30);
+      elsif run("11_coverage_deterministic") then
+
+        counter_coverage := 0;
+
+        for divide_half in 1 to c_config.max_sclk_divide_half loop
+
+          for bits in 1 to c_config.max_n_bits loop
+
+            for clks_scs_to_sclk in 1 to c_config.max_n_clks_scs_to_sclk loop
+
+              for clks_sclk_to_scs in 1 to c_config.max_n_clks_sclk_to_scs loop
+
+                for clks_sclk_to_le in 1 to c_config.max_n_clks_sclk_to_le loop
+
+                  for clks_le_width in 1 to c_config.max_n_clks_le_width loop
+
+                    for clks_rx_sample_strobes_delay in 0 to c_config.max_n_clks_rx_sample_strobes_delay loop
+
+                      counter_coverage := counter_coverage + 1;
+
+                      sclk_divide_half               <= divide_half;
+                      n_bits                         <= bits;
+                      n_clks_scs_to_sclk             <= clks_scs_to_sclk;
+                      n_clks_sclk_to_scs             <= clks_sclk_to_scs;
+                      n_clks_sclk_to_le              <= clks_sclk_to_le;
+                      n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
+                      n_clks_le_width                <= clks_le_width;
+
+                      WaitForClock(i_clk, 1);
+
+                      info("counter_coverage = " & to_string(counter_coverage));
+                      info("    sclk_divide_half = " & to_string(sclk_divide_half));
+                      info("    n_bits = " & to_string(n_bits));
+                      info("    n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
+                      info("    n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+                      info("    n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+                      info("    n_clks_le_width = " & to_string(n_clks_le_width));
+                      info("    n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
+
+                      i_start <= '1';
+                      WaitForClock(i_clk, 1);
+                      i_start <= '0';
+
+                      wait until o_ready = '1';
+
+                      WaitForClock(i_clk, 5);
+
+                    end loop;
+
+                  end loop;
+
+                end loop;
+
+              end loop;
+
+            end loop;
+
+          end loop;
+
+        end loop;
+
+        info("n_checks_d_from_peripheral_total = " & to_string(n_checks_d_from_peripheral_total));
+        info("n_checks_d_to_peripheral_total = " & to_string(n_checks_d_to_peripheral_total));
+        check_equal(n_checks_d_from_peripheral_total, counter_coverage, "The number of d_from_peripheral checks is not as expected.");
+        check_equal(n_checks_d_to_peripheral_total, counter_coverage, "The number of d_to_peripheral checks is not as expected.");
       end if;
 
     end loop;
@@ -423,7 +492,7 @@ begin
 
   end process main;
 
-  test_runner_watchdog(runner, 20 us);
+  test_runner_watchdog(runner, g_watchdog_timeout);
 
   ---------------------------------------------------------------------------
   -- check o_ready
@@ -444,10 +513,15 @@ begin
 
     -- wait until o_scs and o_le are o_ready
     -- either o_scs inactive or o_le takes longer
-    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width) - 1;
+    -- info("n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+    -- info("n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+    -- info("n_clks_le_width = " & to_string(n_clks_le_width));
+    n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);
+    -- info("n_wait = " & to_string(n_wait));
 
     -- wait until the last sample has been sampled
     n_wait_sample_sdi := n_clks_rx_sample_strobes_delay - sclk_divide_half + 3;
+    -- info("n_wait_sample_sdi = " & to_string(n_wait_sample_sdi));
 
     n_wait := maximum(n_wait, n_wait_sample_sdi);
 
@@ -597,11 +671,11 @@ begin
     wait until rising_edge(i_start);
 
     i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
-    wait for 1 ps;
+    wait for 0 ps;
 
     for k in 1 to n_trx_loops loop
 
-      info("  -> i_d_to_peripheral = " & to_string(i_d_to_peripheral));
+      info("  DUT -> TB: i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
       for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
 
@@ -614,6 +688,8 @@ begin
         end if;
 
       end loop;
+
+      n_checks_d_to_peripheral_total <= n_checks_d_to_peripheral_total + 1;
 
     end loop;
 
@@ -636,7 +712,7 @@ begin
 
     for k in 1 to n_trx_loops loop
 
-      info("  <- d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
+      info("  TB -> DUT: d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
 
       for n in n_bits - 1 downto 0 loop
 
@@ -699,7 +775,8 @@ begin
       wait on check_o_d_from_peripheral, o_ready;
 
       if (check_o_d_from_peripheral) then
-        n_checks_d_from_peripheral <= n_checks_d_from_peripheral + 1;
+        n_checks_d_from_peripheral       <= n_checks_d_from_peripheral + 1;
+        n_checks_d_from_peripheral_total <= n_checks_d_from_peripheral_total + 1;
         wait for 0 ps;
       end if;
 

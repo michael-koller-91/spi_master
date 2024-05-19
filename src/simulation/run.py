@@ -2,6 +2,7 @@ import os
 import re
 import random
 from pathlib import Path
+from itertools import product
 from vunit import VUnit, VUnitCLI
 
 
@@ -150,6 +151,46 @@ for n_clks in [0, 1, 2, 3, 10]:
             "g_max_n_clks_rx_sample_strobes_delay": n_clks,
         },
     )
+
+test = tb.test("11_coverage_deterministic")
+timeout = "20 ms"
+counter = 0
+divide_halfs = [8]
+bitss = [7]
+scs_to_sclks = [6]
+sclk_to_scss = [5]
+sclk_to_les = [4]
+le_widths = [3]
+rx_delays = [2]
+for (
+    divide_half,
+    bits,
+    scs_to_sclk,
+    sclk_to_scs,
+    sclk_to_le,
+    le_width,
+    rx_delay,
+) in product(
+    divide_halfs, bitss, scs_to_sclks, sclk_to_scss, sclk_to_les, le_widths, rx_delays
+):
+    counter += 1
+    test.add_config(
+        name=f"c{counter}.seed={seed}.divide_half={divide_half}."
+        f"bits={bits}.scs_to_sclk={scs_to_sclk}.sclk_to_scs={sclk_to_scs}."
+        f"sclk_to_le={sclk_to_le}.le_width={le_width}.rx_delay={rx_delay}",
+        generics={
+            "g_rng_seed": seed,
+            "g_watchdog_timeout": timeout,
+            "g_max_sclk_divide_half": divide_half,
+            "g_max_n_bits": bits,
+            "g_max_n_clks_scs_to_sclk": scs_to_sclk,
+            "g_max_n_clks_sclk_to_scs": sclk_to_scs,
+            "g_max_n_clks_sclk_to_le": sclk_to_le,
+            "g_max_n_clks_le_width": le_width,
+            "g_max_n_clks_rx_sample_strobes_delay": rx_delay,
+        },
+    )
+
 
 if args.warn:
     for test in tb.get_tests():

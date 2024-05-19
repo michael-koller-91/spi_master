@@ -57,34 +57,37 @@ architecture arch of spi_master is
   signal counter_n_sample_sdi       : natural range 0 to g_config.max_n_bits                 := g_config.max_n_bits;
   signal counter_n_sample_sdo       : natural range 0 to g_config.max_n_bits                 := g_config.max_n_bits;
 
-  signal sclk_internal      : std_ulogic := '0';
-  signal sclk_internal_reg1 : std_ulogic := '1';
-  signal sclk_internal_reg2 : std_ulogic := '1';
-  signal scs                : std_ulogic := '1';
+  signal sclk_internal                  : std_ulogic := '0';
+  signal sclk_internal_reg1             : std_ulogic := '1';
+  signal sclk_internal_reg2             : std_ulogic := '1';
+  signal sclk_internal_edge             : std_ulogic := '0';
+  signal sclk_internal_leading_edge     : std_ulogic := '0';
+  signal sclk_internal_leading_edge_reg : std_ulogic := '0';
+  signal sclk_done                      : std_ulogic := '0';
 
-  signal sclk_internal_edge             : std_ulogic                                                              := '0';
-  signal sclk_internal_leading_edge     : std_ulogic                                                              := '0';
-  signal sample_sdo_sreg                : std_ulogic_vector(g_config.max_sclk_divide_half - 1 downto 0)           := (others => '0');
-  signal sclk_internal_leading_edge_reg : std_ulogic                                                              := '0';
-  signal sample_sdi_sreg                : std_ulogic_vector(g_config.max_n_clks_rx_sample_strobes_delay downto 0) := (others => '0');
-  signal sample_sdi                     : std_ulogic                                                              := '0';
-  signal sample_sdi_reg                 : std_ulogic                                                              := '0';
-  signal sample_sdi_read                : std_ulogic                                                              := '0';
-  signal sample_sdo                     : std_ulogic                                                              := '0';
-  signal sample_sdo_reg                 : std_ulogic                                                              := '0';
-  signal sample_sdo_read                : std_ulogic                                                              := '0';
-
-  signal state     : t_state         := idle;
-  signal le_state  : t_le_fsm_state  := idle;
+  signal scs       : std_ulogic      := '1';
   signal scs_state : t_scs_fsm_state := inactive;
-  signal sclk_done : std_ulogic      := '0';
+  signal scs_done  : std_ulogic      := '0';
 
-  signal keep_streaming  : std_ulogic        := '0';
+  signal sample_sdo_sreg : std_ulogic_vector(g_config.max_sclk_divide_half - 1 downto 0)           := (others => '0');
+  signal sample_sdi_sreg : std_ulogic_vector(g_config.max_n_clks_rx_sample_strobes_delay downto 0) := (others => '0');
+  signal sample_sdi      : std_ulogic                                                              := '0';
+  signal sample_sdi_reg  : std_ulogic                                                              := '0';
+  signal sample_sdi_read : std_ulogic                                                              := '0';
+  signal sample_sdo      : std_ulogic                                                              := '0';
+  signal sample_sdo_reg  : std_ulogic                                                              := '0';
+  signal sample_sdo_read : std_ulogic                                                              := '0';
 
-  signal le : std_ulogic := '0';
+  signal state : t_state := idle;
+
+  signal le_state : t_le_fsm_state := idle;
+  signal le       : std_ulogic     := '0';
+  signal le_done  : std_ulogic     := '0';
 
   signal busy  : std_ulogic := '0';
   signal ready : std_ulogic := '0';
+
+  signal keep_streaming : std_ulogic := '0';
 
   -- sampled control
   signal start               : std_ulogic := '0';
@@ -102,10 +105,10 @@ architecture arch of spi_master is
   signal n_bits_minus_1 : unsigned(ceil_log2(g_config.max_n_bits) - 1 downto 0);
 
   -- data
-  signal d_to_peripheral           : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal d_from_peripheral         : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal sd_from_peripheral_reg    : std_ulogic                                          := '0';
-  signal sdo_reg                   : std_ulogic                                          := '0';
+  signal d_to_peripheral        : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal d_from_peripheral      : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal sd_from_peripheral_reg : std_ulogic                                          := '0';
+  signal sdo_reg                : std_ulogic                                          := '0';
 
 begin
 
@@ -215,7 +218,7 @@ begin
 
         when wait_scs_and_le_and_sample_sdi =>
 
-          if (sclk_done = '1' and counter_n_clks_sclk_to_scs = 0 and counter_n_clks_le_width = 0 and counter_n_sample_sdi = 0) then
+          if (sclk_done = '1' and scs_done = '1' and le_done = '1' and counter_n_sample_sdi = 0) then
             ready <= '1';
             state <= idle;
           end if;
@@ -292,18 +295,21 @@ begin
           if (counter_n_clks_le_width = 0) then
             le       <= '0';
             le_state <= idle;
+            le_done  <= '1';
           else
             counter_n_clks_le_width <= counter_n_clks_le_width - 1;
           end if;
 
         when others =>
 
-          le <= '0';
+          le      <= '0';
+          le_done <= '1';
 
           if (start) then
             counter_n_clks_sclk_to_le <= to_integer(i_settings.n_clks_sclk_to_le_minus_1);
             counter_n_clks_le_width   <= to_integer(i_settings.n_clks_le_width_minus_1);
             le_state                  <= wait_until_sclk_done;
+            le_done                   <= '0';
           end if;
 
       end case;
@@ -336,10 +342,12 @@ begin
         when others =>
 
           -- make in-port change visible at out-port without the need of a start strobe
-          scs <= i_settings.scs_idle_state;
+          scs      <= i_settings.scs_idle_state;
+          scs_done <= '1';
 
           if (start) then
-            scs <= not i_settings.scs_idle_state;
+            scs      <= not i_settings.scs_idle_state;
+            scs_done <= '0';
 
             counter_n_clks_sclk_to_scs <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
             scs_state                  <= active;
