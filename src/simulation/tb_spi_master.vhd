@@ -7,11 +7,11 @@ library vunit_lib;
   context vunit_lib.vunit_context;
 
 library osvvm;
-  use osvvm.tbutilpkg.all;
-  use osvvm.randompkg.all;
+  context osvvm.osvvmcontext;
 
 library spi_lib;
   use spi_lib.spi_package.all;
+  use spi_lib.tb_package.all;
 
 entity tb_spi_master is
   generic (
@@ -137,6 +137,10 @@ architecture arch of tb_spi_master is
 
   shared variable rv : RandomPType;
 
+  signal coverage_id : CoverageIDType;
+
+  shared variable check_counter : t_check_counter;
+
 begin
 
   i_settings.scs_idle_state                 <= scs_idle_state;
@@ -180,7 +184,9 @@ begin
 
   main : process is
 
-    variable counter_coverage : integer := 0;
+    variable counter_coverage                         : integer := 0;
+    variable tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 : integer;
+    constant n_bins                                   : integer := 3;
 
   begin
 
@@ -416,7 +422,7 @@ begin
         WaitForClock(i_clk, 1);
 
         WaitForClock(i_clk, 30);
-      elsif run("11_coverage_deterministic") then
+      elsif run("11_deterministic_coverage") then
         counter_coverage := 0;
 
         for divide_half in 1 to c_config.max_sclk_divide_half loop
@@ -440,8 +446,8 @@ begin
                       n_clks_scs_to_sclk             <= clks_scs_to_sclk;
                       n_clks_sclk_to_scs             <= clks_sclk_to_scs;
                       n_clks_sclk_to_le              <= clks_sclk_to_le;
-                      n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
                       n_clks_le_width                <= clks_le_width;
+                      n_clks_rx_sample_strobes_delay <= clks_rx_sample_strobes_delay;
 
                       WaitForClock(i_clk, 1);
 
@@ -486,8 +492,8 @@ begin
         n_clks_scs_to_sclk             <= c_config.max_n_clks_scs_to_sclk;
         n_clks_sclk_to_scs             <= c_config.max_n_clks_sclk_to_scs;
         n_clks_sclk_to_le              <= c_config.max_n_clks_sclk_to_le;
-        n_clks_rx_sample_strobes_delay <= c_config.max_n_clks_rx_sample_strobes_delay;
         n_clks_le_width                <= c_config.max_n_clks_le_width;
+        n_clks_rx_sample_strobes_delay <= c_config.max_n_clks_rx_sample_strobes_delay;
 
         WaitForClock(i_clk, 1);
 
@@ -506,6 +512,75 @@ begin
         wait until o_ready = '1';
 
         WaitForClock(i_clk, 5);
+      elsif run("13_random_coverage") then
+        check_counter.reset;
+
+        coverage_id <= NewID("coverage_id");
+        wait for 0 fs;
+
+        AddCross(
+                 coverage_id,
+                 GenBin(1, c_config.max_sclk_divide_half, n_bins),
+                 GenBin(1, c_config.max_n_bits, n_bins),
+                 GenBin(1, c_config.max_n_clks_scs_to_sclk, n_bins),
+                 GenBin(1, c_config.max_n_clks_sclk_to_scs, n_bins),
+                 GenBin(1, c_config.max_n_clks_sclk_to_le, n_bins),
+                 GenBin(1, c_config.max_n_clks_le_width, n_bins),
+                 GenBin(0, c_config.max_n_clks_rx_sample_strobes_delay, n_bins)
+               );
+
+        counter_coverage := 0;
+
+        while not IsCovered(coverage_id) loop
+
+          counter_coverage := counter_coverage + 1;
+
+          (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7) := GetRandPoint(coverage_id);
+
+          sclk_divide_half               <= tmp1;
+          n_bits                         <= tmp2;
+          n_clks_scs_to_sclk             <= tmp3;
+          n_clks_sclk_to_scs             <= tmp4;
+          n_clks_sclk_to_le              <= tmp5;
+          n_clks_le_width                <= tmp6;
+          n_clks_rx_sample_strobes_delay <= tmp7;
+          scs_idle_state                 <= rv.RandSlv(1)(1);
+          sclk_idle_state                <= rv.RandSlv(1)(1);
+
+          WaitForClock(i_clk, 1);
+
+          info("counter_coverage = " & to_string(counter_coverage));
+          info("    sclk_divide_half = " & to_string(sclk_divide_half));
+          info("    n_bits = " & to_string(n_bits));
+          info("    n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
+          info("    n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+          info("    n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+          info("    n_clks_le_width = " & to_string(n_clks_le_width));
+          info("    n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
+          info("    scs_idle_state = " & to_string(scs_idle_state));
+          info("    sclk_idle_state = " & to_string(sclk_idle_state));
+
+          WaitForClock(i_clk, 5);
+
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
+
+          wait until o_ready = '1';
+
+          WaitForClock(i_clk, 2 * g_max_sclk_divide_half);
+
+          ICover(coverage_id, (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7));
+
+        end loop;
+
+        check_counter.print_values;
+        check_counter.all_equal_to(counter_coverage);
+
+        info("n_checks_d_from_peripheral_total = " & to_string(n_checks_d_from_peripheral_total));
+        info("n_checks_d_to_peripheral_total = " & to_string(n_checks_d_to_peripheral_total));
+        check_equal(n_checks_d_from_peripheral_total, counter_coverage, "The number of d_from_peripheral checks is not as expected.");
+        check_equal(n_checks_d_to_peripheral_total, counter_coverage, "The number of d_to_peripheral checks is not as expected.");
       end if;
 
     end loop;
@@ -559,14 +634,32 @@ begin
   end process p_generate_ready_reference;
 
   p_check_ready : process is
+
+    variable last_check : boolean := false;
+
   begin
 
-    wait on o_ready, ready_reference;
-    wait for 0 fs;
+    wait until i_start = '1';
 
-    if (streaming_mode = '0') then
-      check_equal(o_ready, ready_reference, "o_ready is not equal to ready_reference.", level => level);
-    end if;
+    while True loop
+
+      wait on o_ready, ready_reference;
+
+      if falling_edge(ready_reference) then
+        last_check := true;
+      end if;
+
+      wait for 0 fs;
+
+      if (streaming_mode = '0') then
+        check_equal(o_ready, ready_reference, "o_ready is not equal to ready_reference.", level => level);
+      end if;
+
+      exit when last_check;
+
+    end loop;
+
+    check_counter.inc_ready;
 
   end process p_check_ready;
 
@@ -599,9 +692,10 @@ begin
 
     wait until falling_edge(i_start);
 
-    while not rising_edge(o_ready) loop
+    while True loop
 
       wait on o_ready, o_sclk, sclk_reference;
+      exit when rising_edge(o_ready);
       wait for 0 fs;
 
       if (streaming_mode = '0') then
@@ -609,6 +703,8 @@ begin
       end if;
 
     end loop;
+
+    check_counter.inc_sclk;
 
   end process p_check_sclk;
 
@@ -638,7 +734,7 @@ begin
 
     while not o_ready = '1' loop
 
-      wait on o_scs, scs_reference;
+      wait on o_ready, o_scs, scs_reference;
       wait for 0 fs;
 
       if (streaming_mode = '0') then
@@ -646,6 +742,8 @@ begin
       end if;
 
     end loop;
+
+    check_counter.inc_scs;
 
   end process p_check_scs;
 
@@ -675,7 +773,7 @@ begin
 
     while not o_ready = '1' loop
 
-      wait on o_le, le_reference;
+      wait on o_ready, o_le, le_reference;
       wait for 0 fs;
 
       if (streaming_mode = '0') then
@@ -683,6 +781,8 @@ begin
       end if;
 
     end loop;
+
+    check_counter.inc_le;
 
   end process p_check_le;
 
@@ -715,6 +815,8 @@ begin
       end loop;
 
       n_checks_d_to_peripheral_total <= n_checks_d_to_peripheral_total + 1;
+
+      check_counter.inc_sd_to_peripheral;
 
     end loop;
 
@@ -775,6 +877,7 @@ begin
       if (o_d_from_peripheral_read_strobe) then
         check_equal(o_d_from_peripheral, d_from_peripheral_expected_old, result("for o_d_from_peripheral"), level => level);
         check_o_d_from_peripheral <= '1';
+        check_counter.inc_sd_from_peripheral;
       end if;
     end if;
 
