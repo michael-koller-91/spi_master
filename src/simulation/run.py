@@ -48,8 +48,49 @@ cli.parser.add_argument(
     "--warn",
     action="store_true",
     help="If this argument is present, errors of VUnit checkers are treated "
-    "as warnings and the simulation continues if checks fail.",
+    "as warnings and the simulation continues even if checks fail.",
 )
+cli.parser.add_argument(
+    "--seed",
+    type=int,
+    help="Set the random seed. By default, this is a random number",
+    default=0,
+)
+cli.parser.add_argument(
+    "--timeout",
+    type=int,
+    help="Set the VUnit watchdog timeout in microseconds.",
+    default=50,
+)
+cli.parser.add_argument(
+    "--divide_half", type=int, help="Set max_n_sclk_divide_half.", default=3
+)
+cli.parser.add_argument("--bits", type=int, help="Set max_n_bits.", default=3)
+cli.parser.add_argument(
+    "--scs_to_sclk", type=int, help="Set max_n_clks_scs_to_sclk.", default=3
+)
+cli.parser.add_argument(
+    "--sclk_to_scs", type=int, help="Set max_n_clks_sclk_to_scs.", default=3
+)
+cli.parser.add_argument(
+    "--sclk_to_le", type=int, help="Set max_n_clks_sclk_to_le.", default=3
+)
+cli.parser.add_argument(
+    "--le_width", type=int, help="Set max_n_clks_le_width.", default=3
+)
+cli.parser.add_argument(
+    "--rx_delay", type=int, help="Set max_n_clks_rx_sample_strobes_delay.", default=0
+)
+cli.parser.add_argument(
+    "--scs_idle_state", type=int, help="Set scs_idle_state.", default=1
+)
+cli.parser.add_argument(
+    "--sclk_idle_state", type=int, help="Set sclk_idle_state.", default=1
+)
+cli.parser.add_argument(
+    "--leading_edge", type=int, help="Set transmit_on_sclk_leading_edge.", default=1
+)
+
 args = cli.parse_args()
 
 vu = VUnit.from_args(args=args)
@@ -63,174 +104,70 @@ spi_lib.add_source_files(Path(__file__).parent.parent / "*.vhd")
 
 tb = spi_lib.test_bench("tb_spi_master")
 
-test = tb.test("01_all_sclk_scs_idle_cases")
-counter = 0
-for sclk_idle_state in ["'0'", "'1'"]:
-    for scs_idle_state in ["'0'", "'1'"]:
-        counter += 1
-        test.add_config(
-            name=f"c{counter}.sclk_idle={sclk_idle_state}.scs_idle={scs_idle_state}",
-            generics={
-                "g_sclk_idle_state": sclk_idle_state,
-                "g_scs_idle_state": scs_idle_state,
-            },
-        )
-
-test = tb.test("02_all_sclk_transmit_edge_cases")
-counter = 0
-for sclk_idle_state in ["'0'", "'1'"]:
-    for transmit_edge in ["'0'", "'1'"]:
-        counter += 1
-        test.add_config(
-            name=f"c{counter}.sclk_idle={sclk_idle_state}.transmit_leading={transmit_edge}",
-            generics={
-                "g_sclk_idle_state": sclk_idle_state,
-                "g_transmit_on_sclk_leading_edge": transmit_edge,
-            },
-        )
-
-test = tb.test("03_sclk_divide")
-counter = 0
-for divide in [1, 2, 5, 10]:
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.max_sclk_divide={divide}",
-        generics={
-            "g_max_sclk_divide_half": divide,
-        },
-    )
-
-test = tb.test("04_n_bits")
-counter = 0
-for n_bits in [1, 2, 3, 4]:
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.max_n_bits={n_bits}",
-        generics={
-            "g_max_n_bits": n_bits,
-        },
-    )
-
 seed = random.randint(1_000_000, 9_999_999)
+if args.seed > 0:
+    seed = args.seed
+random.seed(seed)
 
-test = tb.test("05_transmit")
-test.add_config(name=f"rng_seed={seed}", generics={"g_rng_seed": seed})
+timeout = "50 us"
 
-test = tb.test("06_receive")
-test.add_config(name=f"rng_seed={seed}", generics={"g_rng_seed": seed})
+test = tb.test("00_simple_case_for_debugging")
+test.add_config(
+    name=f"seed={seed}",
+    generics={
+        "g_rng_seed": args.seed,
+        "g_sclk_idle_state": f"'{args.sclk_idle_state}'",
+        "g_scs_idle_state": f"'{args.scs_idle_state}'",
+        "g_transmit_on_sclk_leading_edge": f"'{args.leading_edge}'",
+        "g_max_n_clks_scs_to_sclk": args.scs_to_sclk,
+        "g_max_n_clks_sclk_to_scs": args.sclk_to_scs,
+        "g_max_n_bits": args.bits,
+        "g_max_sclk_divide_half": args.divide_half,
+        "g_max_n_clks_sclk_to_le": args.sclk_to_le,
+        "g_max_n_clks_le_width": args.le_width,
+        "g_max_n_clks_rx_sample_strobes_delay": args.rx_delay,
+        "g_watchdog_timeout": timeout,
+    },
+)
 
-test = tb.test("07_max_n_clks_scs_to_sclk")
-counter = 0
-for n_clks in [1, 2, 3, 4]:
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.max_n_clks_scs_to_sclk={n_clks}",
-        generics={
-            "g_max_n_clks_scs_to_sclk": n_clks,
-        },
-    )
 
-test = tb.test("08_max_n_clks_sclk_to_scs")
-counter = 0
-for n_clks in [1, 2, 3, 4]:
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.max_n_clks_sclk_to_scs={n_clks}",
-        generics={
-            "g_max_n_clks_sclk_to_scs": n_clks,
-        },
-    )
+upper = 50
+scs_to_sclk = random.randint(1, upper)
+bits = random.randint(1, upper)
+divide_half = random.randint(1, upper)
+sclk_to_scs = random.randint(1, upper)
+sclk_to_le = random.randint(1, upper)
+le_width = random.randint(1, upper)
+rx_delay = random.randint(0, upper)
 
-test = tb.test("09_max_n_clks_rx_sample_strobes_delay")
-counter = 0
-for n_clks in [0, 1, 2, 3, 10]:
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.max_n_clks_rx_sample_strobes_delay={n_clks}",
-        generics={
-            "g_max_n_clks_rx_sample_strobes_delay": n_clks,
-        },
-    )
+timeout = "50 ms"
+if args.timeout > 50_000:
+    timeout = f"{args.timeout} us"
 
-test = tb.test("11_deterministic_coverage")
-timeout = "40 ms"
-counter = 0
-divide_halfs = [8]
-bitss = [7]
-scs_to_sclks = [6]
-sclk_to_scss = [5]
-sclk_to_les = [4]
-le_widths = [3]
-rx_delays = [2]
-for (
-    divide_half,
-    bits,
-    scs_to_sclk,
-    sclk_to_scs,
-    sclk_to_le,
-    le_width,
-    rx_delay,
-) in product(
-    divide_halfs, bitss, scs_to_sclks, sclk_to_scss, sclk_to_les, le_widths, rx_delays
-):
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.seed={seed}.divide_half={divide_half}."
-        f"bits={bits}.scs_to_sclk={scs_to_sclk}.sclk_to_scs={sclk_to_scs}."
-        f"sclk_to_le={sclk_to_le}.le_width={le_width}.rx_delay={rx_delay}",
-        generics={
-            "g_rng_seed": seed,
-            "g_watchdog_timeout": timeout,
-            "g_max_sclk_divide_half": divide_half,
-            "g_max_n_bits": bits,
-            "g_max_n_clks_scs_to_sclk": scs_to_sclk,
-            "g_max_n_clks_sclk_to_scs": sclk_to_scs,
-            "g_max_n_clks_sclk_to_le": sclk_to_le,
-            "g_max_n_clks_le_width": le_width,
-            "g_max_n_clks_rx_sample_strobes_delay": rx_delay,
-        },
-    )
+print("--- random parameters of 01_random_coverage ---")
+print("  scs_to_sclk =", scs_to_sclk)
+print("  bits =", bits)
+print("  divide_half =", divide_half)
+print("  sclk_to_scs =", sclk_to_scs)
+print("  sclk_to_le =", sclk_to_le)
+print("  le_width =", le_width)
+print("  rx_delay =", rx_delay)
 
-test = tb.test("13_random_coverage")
-upper = 20
-timeout = "10 ms"
-counter = 0
-divide_halfs = [random.randint(1, upper)]
-bitss = [random.randint(1, upper)]
-scs_to_sclks = [random.randint(1, upper)]
-sclk_to_scss = [random.randint(1, upper)]
-sclk_to_les = [random.randint(1, upper)]
-le_widths = [random.randint(1, upper)]
-rx_delays = [random.randint(0, upper)]
-for (
-    divide_half,
-    bits,
-    scs_to_sclk,
-    sclk_to_scs,
-    sclk_to_le,
-    le_width,
-    rx_delay,
-) in product(
-    divide_halfs, bitss, scs_to_sclks, sclk_to_scss, sclk_to_les, le_widths, rx_delays
-):
-
-    counter += 1
-    test.add_config(
-        name=f"c{counter}.seed={seed}.divide_half={divide_half}."
-        f"bits={bits}.scs_to_sclk={scs_to_sclk}.sclk_to_scs={sclk_to_scs}."
-        f"sclk_to_le={sclk_to_le}.le_width={le_width}.rx_delay={rx_delay}",
-        generics={
-            "g_rng_seed": seed,
-            "g_watchdog_timeout": timeout,
-            "g_max_sclk_divide_half": divide_half,
-            "g_max_n_bits": bits,
-            "g_max_n_clks_scs_to_sclk": scs_to_sclk,
-            "g_max_n_clks_sclk_to_scs": sclk_to_scs,
-            "g_max_n_clks_sclk_to_le": sclk_to_le,
-            "g_max_n_clks_le_width": le_width,
-            "g_max_n_clks_rx_sample_strobes_delay": rx_delay,
-        },
-    )
+test = tb.test("01_random_coverage")
+test.add_config(
+    name=f"seed={seed}",
+    generics={
+        "g_rng_seed": seed,
+        "g_max_n_clks_scs_to_sclk": scs_to_sclk,
+        "g_max_n_clks_sclk_to_scs": sclk_to_scs,
+        "g_max_n_bits": bits,
+        "g_max_sclk_divide_half": divide_half,
+        "g_max_n_clks_sclk_to_le": sclk_to_le,
+        "g_max_n_clks_le_width": le_width,
+        "g_max_n_clks_rx_sample_strobes_delay": rx_delay,
+        "g_watchdog_timeout": timeout,
+    },
+)
 
 if args.warn:
     for test in tb.get_tests():

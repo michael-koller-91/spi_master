@@ -1,9 +1,15 @@
+---------------------------------------------------------------------------
+-- This package is only used in the testbench.
+-- It counts how many checks have been made and compares this to the
+-- expected number of checks.
+---------------------------------------------------------------------------
+
 library vunit_lib;
   context vunit_lib.vunit_context;
 
 package tb_package is
 
-  type t_check_counter is protected
+  type t_counter_checks is protected
 
     procedure print_values;
 
@@ -31,7 +37,7 @@ end package tb_package;
 
 package body tb_package is
 
-  type t_check_counter is protected body
+  type t_counter_checks is protected body
 
     variable n_le                 : natural;
     variable n_ready              : natural;
