@@ -182,5 +182,8 @@ vu.set_sim_option(
 vu.set_sim_option(
     "nvc.gtkwave_script.gui", str(Path(__file__).parent / waveform_filename)
 )
+vu.set_sim_option(
+    "rivierapro.init_file.gui", str(Path(__file__).parent / "waveform_rivierapro.tcl")
+)
 
 vu.main()
