@@ -298,7 +298,7 @@ begin
 
           wait until o_ready = '1';
 
-          WaitForClock(i_clk, 50); -- because `upper = 50` in run.py
+          WaitForClock(i_clk, 2 * 50 + 10); -- because `upper = 50` in run.py
 
           ICover(coverage_id, (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7));
 
@@ -572,6 +572,9 @@ begin
       end loop;
 
       n_checks_d_to_peripheral_total <= n_checks_d_to_peripheral_total + 1;
+
+      i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
+      wait for 0 fs;
 
       counter_checks.inc_sd_to_peripheral;
 
