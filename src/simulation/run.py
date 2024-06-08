@@ -144,14 +144,15 @@ timeout = "50 ms"
 if args.timeout > 50_000:
     timeout = f"{args.timeout} us"
 
-print("--- random parameters of 01_random_coverage ---")
-print("  scs_to_sclk =", scs_to_sclk)
-print("  bits =", bits)
-print("  divide_half =", divide_half)
-print("  sclk_to_scs =", sclk_to_scs)
-print("  sclk_to_le =", sclk_to_le)
-print("  le_width =", le_width)
-print("  rx_delay =", rx_delay)
+if not args.list:
+    print("--- random parameters of 01_random_coverage ---")
+    print("  scs_to_sclk =", scs_to_sclk)
+    print("  bits =", bits)
+    print("  divide_half =", divide_half)
+    print("  sclk_to_scs =", sclk_to_scs)
+    print("  sclk_to_le =", sclk_to_le)
+    print("  le_width =", le_width)
+    print("  rx_delay =", rx_delay)
 
 test = tb.test("01_random_coverage")
 test.add_config(

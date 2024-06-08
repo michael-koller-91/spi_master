@@ -94,7 +94,6 @@ architecture arch of tb_spi_master is
   signal i_sd_from_peripheral : std_ulogic := '0';
   signal o_sd_to_peripheral   : std_ulogic := '0';
 
-  signal o_streaming_start : std_ulogic := '0';
   signal i_keep_streaming  : std_ulogic := '0';
 
   signal o_busy          : std_ulogic := '0';
@@ -163,7 +162,6 @@ begin
       i_start           => i_start,
       o_busy            => o_busy,
       o_ready           => o_ready,
-      o_streaming_start => o_streaming_start,
       i_keep_streaming  => i_keep_streaming,
       --
       i_d_to_peripheral               => i_d_to_peripheral,
@@ -312,7 +310,7 @@ begin
         streaming_mode                <= '1';
         i_keep_streaming              <= '1';
 
-        n_trx_loops <= 4;
+        n_trx_loops <= 5;
 
         WaitForClock(i_clk, 1);
         info("n_trx_loops = " & to_string(n_trx_loops));

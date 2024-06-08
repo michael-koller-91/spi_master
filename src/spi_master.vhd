@@ -21,7 +21,6 @@ entity spi_master is
     i_start           : in    std_ulogic := '0';
     o_busy            : out   std_ulogic := '0';
     o_ready           : out   std_ulogic := '0';
-    o_streaming_start : out   std_ulogic := '0';
     i_keep_streaming  : in    std_ulogic := '0';
     -- data
     i_d_to_peripheral               : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
@@ -92,7 +91,6 @@ architecture arch of spi_master is
 
   -- sampled control
   signal start               : std_ulogic := '0';
-  signal streaming_start_out : std_ulogic := '0';
 
   -- sampled settings
   signal sclk_divide_half_minus_1_2g    : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
@@ -151,7 +149,6 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      -- if (start or streaming_start_out) then
       if (start or sample_sdo_read) then
         keep_streaming <= i_keep_streaming;
       end if;
@@ -162,8 +159,6 @@ begin
   ---------------------------------------------------------------------------
   -- handle out-ports
   ---------------------------------------------------------------------------
-
-  o_streaming_start <= streaming_start_out;
 
   p_peripheral_read : process (i_clk) is
   begin
@@ -377,7 +372,6 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      streaming_start_out <= '0';
 
       case sclk_state is
 
@@ -391,13 +385,8 @@ begin
             sclk_internal      <= not sclk_internal;
             sclk_internal_edge <= '1';
 
-            -- if (counter_n_sclk_edges = 1) then
-            --  streaming_start_out <= '1';
-            -- end if;
-
             if (counter_n_sclk_edges = 0) then
               counter_n_sclk_edges <= to_integer(n_bits_minus_1 & '1');
-              streaming_start_out  <= '1';
             else
               counter_n_sclk_edges <= counter_n_sclk_edges - 1;
             end if;
