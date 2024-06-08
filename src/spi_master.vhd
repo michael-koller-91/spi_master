@@ -209,14 +209,6 @@ begin
 
       case state is
 
-        when wait_sclk =>
-
-          state <= trx;
-
-        when trx =>
-
-          state <= wait_scs_and_le_and_sample_sdi;
-
         when wait_scs_and_le_and_sample_sdi =>
 
           if (sclk_done = '1' and scs_done = '1' and le_done = '1' and sample_sdi_done = '1') then
@@ -232,7 +224,7 @@ begin
           if (start) then
             busy <= '1';
 
-            state <= wait_sclk;
+            state <= wait_scs_and_le_and_sample_sdi;
           end if;
 
       end case;

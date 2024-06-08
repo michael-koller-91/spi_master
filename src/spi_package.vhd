@@ -98,7 +98,7 @@ package spi_package is
 
   -- States for state machines.
 
-  type t_state is (idle, wait_sclk, trx, wait_scs_and_le_and_sample_sdi);
+  type t_state is (idle, wait_scs_and_le_and_sample_sdi);
 
   type t_sclk_fsm_state is (inactive, active);
 
