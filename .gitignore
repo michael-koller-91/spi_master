@@ -1,5 +1,5 @@
 .venv
 vunit_out
-waveform.tcl
+waveform*.tcl
 *.org
 
