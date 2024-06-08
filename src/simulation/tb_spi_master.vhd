@@ -221,7 +221,7 @@ begin
 
         WaitForClock(i_clk, 1);
 
-        info("settings");
+        info("settings:");
         info("  sclk_divide_half = " & to_string(sclk_divide_half));
         info("  n_bits = " & to_string(n_bits));
         info("  n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));

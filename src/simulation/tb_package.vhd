@@ -49,6 +49,7 @@ package body tb_package is
     procedure print_values is
     begin
 
+      info("number of checks:");
       info("n_le                 = " & to_string(n_le));
       info("n_ready              = " & to_string(n_ready));
       info("n_scs                = " & to_string(n_scs));
