@@ -17,6 +17,8 @@ package tb_package is
 
     procedure inc_le;
 
+    procedure inc_busy;
+
     procedure inc_ready;
 
     procedure inc_scs;
@@ -35,10 +37,6 @@ package tb_package is
       n_checks_expected : positive
     );
 
-    procedure streaming_mode_all_equal_to (
-      n_checks_expected : positive
-    );
-
   end protected;
 
 end package tb_package;
@@ -48,6 +46,7 @@ package body tb_package is
   type t_counter_checks is protected body
 
     variable n_le                 : natural;
+    variable n_busy               : natural;
     variable n_ready              : natural;
     variable n_scs                : natural;
     variable n_sclk               : natural;
@@ -73,6 +72,7 @@ package body tb_package is
     begin
 
       n_le                 := 0;
+      n_busy               := 0;
       n_ready              := 0;
       n_scs                := 0;
       n_sclk               := 0;
@@ -86,6 +86,13 @@ package body tb_package is
     begin
 
       n_le := n_le + 1;
+
+    end procedure;
+
+    procedure inc_busy is
+    begin
+
+      n_busy := n_busy + 1;
 
     end procedure;
 
@@ -139,25 +146,12 @@ package body tb_package is
     begin
 
       check_equal(n_le, n_checks_expected, result("for the number of le checks"));
+      check_equal(n_busy, n_checks_expected, result("for the number of busy checks"));
       check_equal(n_ready, n_checks_expected, result("for the number of ready checks"));
       check_equal(n_scs, n_checks_expected, result("for the number of scs checks"));
       check_equal(n_sclk, n_checks_expected, result("for the number of sclk checks"));
       check_equal(n_sd_to_peripheral, n_checks_expected, result("for the number of sd_to_peripheral checks"));
       check_equal(n_sd_from_peripheral, n_checks_expected, result("for the number of sd_from_peripheral checks"));
-
-    end procedure;
-
-    procedure streaming_mode_all_equal_to (
-      n_checks_expected : positive
-    ) is
-    begin
-
-      check_equal(n_le, n_checks_expected, result("for the number of le checks"));
-      check_equal(n_ready, n_checks_expected, result("for the number of ready checks"));
-      check_equal(n_scs, n_checks_expected, result("for the number of scs checks"));
-      check_equal(n_sclk, n_checks_expected, result("for the number of sclk checks"));
-      check_equal(n_sd_to_peripheral, n_trx, result("for the number of sd_to_peripheral checks"));
-      check_equal(n_sd_from_peripheral, n_trx, result("for the number of sd_from_peripheral checks"));
 
     end procedure;
 

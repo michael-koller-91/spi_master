@@ -34,7 +34,6 @@ end entity tb_spi_master;
 
 architecture arch of tb_spi_master is
   constant g_watchdog_timeout : time := 50 ms;
-  constant c_max_n_trx_loops : positive := 31;
 
   constant c_clk_period : time     := 10 ns;
   constant c_config     : t_config :=
@@ -80,9 +79,7 @@ architecture arch of tb_spi_master is
 
   signal o_d_from_peripheral             : t_d_from_peripheral(data(c_config.max_n_bits - 1 downto 0)) := ((others => '0'), '0');
   signal d_from_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal n_trx_loops                     : integer                                             := 1;
   signal d_from_peripheral_expected_old  : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal o_sampled_d_to_peripheral   : std_ulogic                                          := '0';
   signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
   signal check_data_to_peripheral_done    : std_ulogic := '0';
@@ -93,6 +90,7 @@ architecture arch of tb_spi_master is
   signal o_sd_to_peripheral   : std_ulogic := '0';
 
   signal o_busy          : std_ulogic := '0';
+  signal busy_reference  : std_ulogic := '0';
   signal o_ready         : std_ulogic := '0';
   signal ready_reference : std_ulogic := '0';
   signal o_sclk          : std_ulogic := '0';
@@ -323,20 +321,13 @@ begin
     wait until rising_edge(i_start);
     ready_reference <= '0';
 
-    -- wait until o_sclk stops
     WaitForClock(i_clk, 2 + n_clks_scs_to_sclk + (2 * n_bits - 1) * sclk_divide_half);
 
-    -- wait until o_scs and o_le are o_ready
     -- either o_scs inactive or o_le takes longer
-    -- info("n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
-    -- info("n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
-    -- info("n_clks_le_width = " & to_string(n_clks_le_width));
     n_wait := maximum(n_clks_sclk_to_scs, n_clks_sclk_to_le + n_clks_le_width);
-    -- info("n_wait = " & to_string(n_wait));
 
     -- wait until the last sample has been sampled
     n_wait_sample_sdi := n_clks_rx_sample_strobes_delay - sclk_divide_half + 3;
-    -- info("n_wait_sample_sdi = " & to_string(n_wait_sample_sdi));
 
     n_wait := maximum(n_wait, n_wait_sample_sdi);
 
@@ -375,6 +366,48 @@ begin
     counter_checks.inc_ready;
 
   end process p_check_ready;
+
+  ---------------------------------------------------------------------------
+  -- check o_busy
+  ---------------------------------------------------------------------------
+
+  p_generate_busy_reference : process is
+
+  begin
+    busy_reference <= '0';
+    wait until falling_edge(i_start);
+    busy_reference <= '1';
+    wait until falling_edge(ready_reference);
+    busy_reference <= '0';
+  end process;
+
+  p_check_busy : process is
+
+    variable last_check : boolean := false;
+
+  begin
+
+    wait until i_start = '1';
+
+    while True loop
+
+      wait on o_busy, busy_reference;
+
+      if falling_edge(busy_reference) then
+        last_check := true;
+      end if;
+
+      wait for 0 fs;
+
+        check_equal(o_busy, busy_reference, "o_busy is not equal to busy_reference.", level => level);
+
+      exit when last_check;
+
+    end loop;
+
+    counter_checks.inc_busy;
+
+  end process p_check_busy;
 
   ---------------------------------------------------------------------------
   -- check o_sclk
@@ -509,9 +542,7 @@ begin
     i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
     wait for 0 ps;
 
-    for k in 1 to n_trx_loops loop
-
-      info("  DUT -> TB (k = " & to_string(k) & "): i_d_to_peripheral = " & to_string(i_d_to_peripheral));
+      info("  DUT -> TB: i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
       for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
 
@@ -529,8 +560,6 @@ begin
       wait for 0 fs;
 
       counter_checks.inc_sd_to_peripheral;
-
-    end loop;
 
   end process p_check_data_to_peripheral;
 
@@ -553,9 +582,8 @@ begin
 
     WaitForClock(i_clk, n_clks_rx_sample_strobes_delay);
 
-    for k in 1 to n_trx_loops loop
 
-      info("  TB -> DUT (k = " & to_string(k) & "): d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
+      info("  TB -> DUT: d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
 
       for n in n_bits - 1 downto 0 loop
 
@@ -576,8 +604,6 @@ begin
       d_from_peripheral_expected                      <= (others => '0');
       d_from_peripheral_expected(n_bits - 1 downto 0) <= rv.RandSlv(n_bits);
       WaitForClock(i_clk, 1);
-
-    end loop;
 
   end process p_generate_sd_from_peripheral;
 

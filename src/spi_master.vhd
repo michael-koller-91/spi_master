@@ -20,9 +20,9 @@ entity spi_master is
     --
     -- control
     --
-    i_start           : in    std_ulogic := '0';
-    o_busy            : out   std_ulogic := '0';
-    o_ready           : out   std_ulogic := '0';
+    i_start : in    std_ulogic := '0';
+    o_busy  : out   std_ulogic := '0';
+    o_ready : out   std_ulogic := '0';
     --
     -- data
     --
@@ -70,8 +70,8 @@ architecture arch of spi_master is
   signal sclk_done                      : std_ulogic := '0';
 
   signal scs       : std_ulogic      := '1';
-  signal scs_state : t_scs_fsm_state := inactive;
   signal scs_done  : std_ulogic      := '0';
+  signal scs_state : t_scs_fsm_state := inactive;
 
   signal sample_sdo_sreg        : std_ulogic_vector(g_config.max_sclk_divide_half - 1 downto 0)           := (others => '0');
   signal sample_sdi_sreg        : std_ulogic_vector(g_config.max_n_clks_rx_sample_strobes_delay downto 0) := (others => '0');
@@ -80,34 +80,25 @@ architecture arch of spi_master is
   signal sample_sdi_read        : std_ulogic                                                              := '0';
   signal sample_sdi_done        : std_ulogic                                                              := '0';
   signal sample_sdi_done_detect : std_ulogic                                                              := '0';
-  signal sample_sdo             : std_ulogic                                                              := '0';
-  signal sample_sdo_reg         : std_ulogic                                                              := '0';
-  signal sample_sdo_read        : std_ulogic                                                              := '0';
+  signal sample_sdi_state       : t_sample_sdi_state                                                      := idle;
 
-  signal sample_sdi_state : t_sample_sdi_state := idle;
+  signal sample_sdo      : std_ulogic := '0';
+  signal sample_sdo_reg  : std_ulogic := '0';
+  signal sample_sdo_read : std_ulogic := '0';
+  signal state           : t_state    := idle;
 
-  signal state : t_state := idle;
-
-  signal le_state : t_le_fsm_state := idle;
   signal le       : std_ulogic     := '0';
   signal le_done  : std_ulogic     := '0';
+  signal le_state : t_le_fsm_state := idle;
 
-  signal busy  : std_ulogic := '0';
-  signal ready : std_ulogic := '0';
+  signal start    : std_ulogic := '0';
+  signal busy     : std_ulogic := '0';
+  signal ready    : std_ulogic := '0';
 
-  -- sampled control
-  signal start               : std_ulogic := '0';
-
-  -- sampled settings
   signal sclk_divide_half_minus_1_2g    : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
   signal transmit_on_sclk_leading_edge  : std_ulogic                                                     := '1';
-  -- signal n_clks_sclk_to_scs_minus_1     : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1         := 0;
-  -- signal n_clks_sclk_to_le_minus_1      : natural range 0 to g_config.max_n_clks_sclk_to_le - 1          := 0;
-  -- signal n_clks_le_width_minus_1        : natural range 0 to g_config.max_n_clks_le_width - 1            := 0;
   signal n_clks_rx_sample_strobes_delay : natural range 0 to g_config.max_n_clks_rx_sample_strobes_delay := 0;
-  -- signal n_clks_scs_to_sclk_minus_1     : natural range 0 to g_config.max_n_clks_scs_to_sclk - 1         := 0;
-
-  signal n_bits_minus_1 : unsigned(ceil_log2(g_config.max_n_bits) - 1 downto 0);
+  signal n_bits_minus_1                 : unsigned(ceil_log2(g_config.max_n_bits) - 1 downto 0)          := (others => '0');
 
   -- data
   signal d_to_peripheral        : std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
@@ -131,11 +122,7 @@ begin
       if (start = '1') then
         transmit_on_sclk_leading_edge  <= i_settings.transmit_on_sclk_leading_edge;
         sclk_divide_half_minus_1_2g    <= to_integer(i_settings.sclk_divide_half_minus_1);
-        -- n_clks_sclk_to_scs_minus_1     <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
-        -- n_clks_sclk_to_le_minus_1      <= to_integer(i_settings.n_clks_sclk_to_le_minus_1);
-        -- n_clks_le_width_minus_1        <= to_integer(i_settings.n_clks_le_width_minus_1);
         n_clks_rx_sample_strobes_delay <= to_integer(i_settings.n_clks_rx_sample_strobes_delay);
-        -- n_clks_scs_to_sclk_minus_1     <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
         n_bits_minus_1                 <= i_settings.n_bits_minus_1;
       end if;
     end if;
@@ -596,4 +583,3 @@ begin
   end process p_receive_from_peripheral;
 
 end architecture arch;
-

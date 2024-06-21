@@ -2,7 +2,6 @@ import os
 import re
 import random
 from pathlib import Path
-from itertools import product
 from vunit import VUnit, VUnitCLI
 
 
@@ -129,7 +128,6 @@ test.add_config(
         "g_watchdog_timeout": timeout,
     },
 )
-
 
 upper = 50
 scs_to_sclk = random.randint(1, upper)
