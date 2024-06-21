@@ -23,17 +23,11 @@ entity spi_master is
     i_start           : in    std_ulogic := '0';
     o_busy            : out   std_ulogic := '0';
     o_ready           : out   std_ulogic := '0';
-    i_keep_streaming  : in    std_ulogic := '0';
     --
-    -- data that will be sent to the peripheral
+    -- data
     --
-    i_d_to_peripheral         : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0)         := (others => '0'); -- this data will be sent to the peripheral
-    -- in streaming mode, `o_sampled_d_to_peripheral` goes high for one clock cycle when `i_d_to_peripheral` has been read
-    o_sampled_d_to_peripheral : out   std_ulogic                                                  := '0';
-    --
-    -- data that was received from the peripheral
-    --
-    o_d_from_peripheral : out   t_d_from_peripheral(data(g_config.max_n_bits - 1 downto 0)) := ((others => '0'), '0');
+    i_d_to_peripheral   : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0)         := (others => '0'); -- data that will be sent to the peripheral
+    o_d_from_peripheral : out   t_d_from_peripheral(data(g_config.max_n_bits - 1 downto 0)) := ((others => '0'), '0');-- data that was received from the peripheral
     --
     -- settings (see the comments in `spi_package`)
     --
@@ -101,21 +95,17 @@ architecture arch of spi_master is
   signal busy  : std_ulogic := '0';
   signal ready : std_ulogic := '0';
 
-  signal keep_streaming : std_ulogic := '0';
-  signal keep_streaming_old : std_ulogic := '0';
-  signal last_trx : std_ulogic := '0';
-
   -- sampled control
   signal start               : std_ulogic := '0';
 
   -- sampled settings
   signal sclk_divide_half_minus_1_2g    : natural range 0 to g_config.max_sclk_divide_half - 1           := 0;
   signal transmit_on_sclk_leading_edge  : std_ulogic                                                     := '1';
-  signal n_clks_sclk_to_scs_minus_1     : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1         := 0;
-  signal n_clks_sclk_to_le_minus_1      : natural range 0 to g_config.max_n_clks_sclk_to_le - 1          := 0;
-  signal n_clks_le_width_minus_1        : natural range 0 to g_config.max_n_clks_le_width - 1            := 0;
+  -- signal n_clks_sclk_to_scs_minus_1     : natural range 0 to g_config.max_n_clks_sclk_to_scs - 1         := 0;
+  -- signal n_clks_sclk_to_le_minus_1      : natural range 0 to g_config.max_n_clks_sclk_to_le - 1          := 0;
+  -- signal n_clks_le_width_minus_1        : natural range 0 to g_config.max_n_clks_le_width - 1            := 0;
   signal n_clks_rx_sample_strobes_delay : natural range 0 to g_config.max_n_clks_rx_sample_strobes_delay := 0;
-  signal n_clks_scs_to_sclk_minus_1     : natural range 0 to g_config.max_n_clks_scs_to_sclk - 1         := 0;
+  -- signal n_clks_scs_to_sclk_minus_1     : natural range 0 to g_config.max_n_clks_scs_to_sclk - 1         := 0;
 
   signal n_bits_minus_1 : unsigned(ceil_log2(g_config.max_n_bits) - 1 downto 0);
 
@@ -141,11 +131,11 @@ begin
       if (start = '1') then
         transmit_on_sclk_leading_edge  <= i_settings.transmit_on_sclk_leading_edge;
         sclk_divide_half_minus_1_2g    <= to_integer(i_settings.sclk_divide_half_minus_1);
-        n_clks_sclk_to_scs_minus_1     <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
-        n_clks_sclk_to_le_minus_1      <= to_integer(i_settings.n_clks_sclk_to_le_minus_1);
-        n_clks_le_width_minus_1        <= to_integer(i_settings.n_clks_le_width_minus_1);
+        -- n_clks_sclk_to_scs_minus_1     <= to_integer(i_settings.n_clks_sclk_to_scs_minus_1);
+        -- n_clks_sclk_to_le_minus_1      <= to_integer(i_settings.n_clks_sclk_to_le_minus_1);
+        -- n_clks_le_width_minus_1        <= to_integer(i_settings.n_clks_le_width_minus_1);
         n_clks_rx_sample_strobes_delay <= to_integer(i_settings.n_clks_rx_sample_strobes_delay);
-        n_clks_scs_to_sclk_minus_1     <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
+        -- n_clks_scs_to_sclk_minus_1     <= to_integer(i_settings.n_clks_scs_to_sclk_minus_1);
         n_bits_minus_1                 <= i_settings.n_bits_minus_1;
       end if;
     end if;
@@ -160,26 +150,6 @@ begin
     end if;
 
   end process p_input_register;
-
-  p_keep_streaming : process (i_clk) is
-  begin
-
-    if rising_edge(i_clk) then
-      if (start or sample_sdo_read) then
-        keep_streaming <= i_keep_streaming;
-      end if;
-
-      if start = '1' then
-        last_trx <= not i_keep_streaming;
-      else
-        if keep_streaming = '0' and sample_sdo = '1' then
-          last_trx <= '1';
-        end if;
-      end if;
-
-    end if;
-
-  end process p_keep_streaming;
 
   ---------------------------------------------------------------------------
   -- handle out-ports
@@ -197,8 +167,6 @@ begin
     end if;
 
   end process p_peripheral_read;
-
-  o_sampled_d_to_peripheral <= sample_sdo_read and keep_streaming;
 
   o_busy  <= busy;
   o_ready <= ready;
@@ -301,7 +269,7 @@ begin
 
   end process p_sample_sdi_done;
 
-  sample_sdi_done_detect <= '1' when keep_streaming = '0' and counter_n_sample_sdi = 0 and sample_sdi_reg = '1' else
+  sample_sdi_done_detect <= '1' when counter_n_sample_sdi = 0 and sample_sdi_reg = '1' else
                             '0';
 
   ---------------------------------------------------------------------------
@@ -432,12 +400,10 @@ begin
               counter_n_sclk_edges <= counter_n_sclk_edges - 1;
             end if;
 
-            if (not keep_streaming) then
               if (counter_n_sclk_edges = 1) then
                 sclk_state := inactive;
                 sclk_done  <= '1';
               end if;
-            end if;
           else
             counter_clk_divide <= counter_clk_divide - 1;
           end if;

@@ -92,12 +92,8 @@ architecture arch of tb_spi_master is
   signal i_sd_from_peripheral : std_ulogic := '0';
   signal o_sd_to_peripheral   : std_ulogic := '0';
 
-  signal i_keep_streaming  : std_ulogic := '0';
-
   signal o_busy          : std_ulogic := '0';
   signal o_ready         : std_ulogic := '0';
-  signal ready_delayed1  : std_ulogic := '0';
-  signal ready_delayed2  : std_ulogic := '0';
   signal ready_reference : std_ulogic := '0';
   signal o_sclk          : std_ulogic := '0';
   signal sclk_reference  : std_ulogic := '0';
@@ -117,7 +113,6 @@ architecture arch of tb_spi_master is
   signal sclk_idle_state               : std_ulogic := g_sclk_idle_state;
   signal scs_idle_state                : std_ulogic := g_scs_idle_state;
   signal transmit_on_sclk_leading_edge : std_ulogic := g_transmit_on_sclk_leading_edge;
-  signal streaming_mode                : std_ulogic := '0';
 
   signal i_settings : t_settings
         (
@@ -160,10 +155,8 @@ begin
       i_start           => i_start,
       o_busy            => o_busy,
       o_ready           => o_ready,
-      i_keep_streaming  => i_keep_streaming,
       --
       i_d_to_peripheral         => i_d_to_peripheral,
-      o_sampled_d_to_peripheral => o_sampled_d_to_peripheral,
       o_d_from_peripheral       => o_d_from_peripheral,
       --
       i_settings => i_settings,
@@ -202,7 +195,9 @@ begin
 
     while test_suite loop
 
-      if run("00_simple_case_for_debugging") then
+      if run("00_simple_case") then
+        -- This test case exists mainly for debugging purposes.
+
         sclk_divide_half               <= c_config.max_sclk_divide_half;
         n_bits                         <= c_config.max_n_bits;
         n_clks_scs_to_sclk             <= c_config.max_n_clks_scs_to_sclk;
@@ -301,151 +296,6 @@ begin
 
         counter_checks.print_values;
         counter_checks.all_equal_to(counter_coverage);
-      elsif run("10_streaming_mode_simple_case_for_debugging") then
-        streaming_mode   <= '1';
-        i_keep_streaming <= '1';
-        wait for 0 ns;
-
-        sclk_divide_half               <= c_config.max_sclk_divide_half;
-        n_bits                         <= c_config.max_n_bits;
-        n_clks_scs_to_sclk             <= c_config.max_n_clks_scs_to_sclk;
-        n_clks_sclk_to_scs             <= c_config.max_n_clks_sclk_to_scs;
-        n_clks_sclk_to_le              <= c_config.max_n_clks_sclk_to_le;
-        n_clks_le_width                <= c_config.max_n_clks_le_width;
-        n_clks_rx_sample_strobes_delay <= c_config.max_n_clks_rx_sample_strobes_delay;
-        n_trx_loops                    <= 6;
-        scs_idle_state                 <= g_scs_idle_state;
-        sclk_idle_state                <= g_sclk_idle_state;
-        transmit_on_sclk_leading_edge  <= g_transmit_on_sclk_leading_edge;
-
-        WaitForClock(i_clk, 1);
-
-        info("settings:");
-        info("  sclk_divide_half = " & to_string(sclk_divide_half));
-        info("  n_bits = " & to_string(n_bits));
-        info("  n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
-        info("  n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
-        info("  n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
-        info("  n_clks_le_width = " & to_string(n_clks_le_width));
-        info("  n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
-        info("  n_trx_loops = " & to_string(n_trx_loops));
-        info("  scs_idle_state = " & to_string(scs_idle_state));
-        info("  sclk_idle_state = " & to_string(sclk_idle_state));
-        info("  transmit_on_sclk_leading_edge = " & to_string(transmit_on_sclk_leading_edge));
-
-        i_start <= '1';
-        WaitForClock(i_clk, 1);
-        i_start <= '0';
-
-        for k in 1 to n_trx_loops - 2 loop
-
-          wait until rising_edge(o_sampled_d_to_peripheral);
-          WaitForClock(i_clk, 1);
-
-          if (k = n_trx_loops - 2) then
-            i_keep_streaming <= '0';
-          end if;
-
-        end loop;
-
-        wait until rising_edge(o_sampled_d_to_peripheral);
-        WaitForClock(i_clk, 1);
-
-        WaitForClock(i_clk, 30);
-      elsif run("11_streaming_mode_random_coverage") then
-        streaming_mode <= '1';
-        wait for 0 ns;
-
-        counter_checks.reset;
-
-        coverage_id <= NewID("coverage_id");
-        wait for 0 fs;
-
-        AddCross(
-                 coverage_id,
-                 GenBin(1, c_config.max_sclk_divide_half, n_bins),
-                 GenBin(1, c_config.max_n_bits, n_bins),
-                 GenBin(1, c_config.max_n_clks_scs_to_sclk, n_bins),
-                 GenBin(1, c_config.max_n_clks_sclk_to_scs, n_bins),
-                 GenBin(1, c_config.max_n_clks_sclk_to_le, n_bins),
-                 GenBin(1, c_config.max_n_clks_le_width, n_bins),
-                 GenBin(0, c_config.max_n_clks_rx_sample_strobes_delay, n_bins),
-                 GenBin(3, c_max_n_trx_loops, n_bins)
-               );
-
-        counter_coverage := 0;
-
-        while not IsCovered(coverage_id) loop
-
-          counter_coverage := counter_coverage + 1;
-
-          (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8) := GetRandPoint(coverage_id);
-
-          sclk_divide_half               <= 1;--tmp1;
-          n_bits                         <= tmp2;
-          n_clks_scs_to_sclk             <= tmp3;
-          n_clks_sclk_to_scs             <= tmp4;
-          n_clks_sclk_to_le              <= tmp5;
-          n_clks_le_width                <= tmp6;
-          n_clks_rx_sample_strobes_delay <= tmp7;
-          n_trx_loops                    <= tmp8;
-          scs_idle_state                 <= rv.RandSlv(1)(1);
-          sclk_idle_state                <= rv.RandSlv(1)(1);
-          transmit_on_sclk_leading_edge  <= '1';--rv.RandSlv(1)(1);
-
-          if counter_coverage = 2 then
-            sclk_divide_half <= 1;
-          end if;
-
-          WaitForClock(i_clk, 1);
-
-          info("counter_coverage = " & to_string(counter_coverage));
-          info("    sclk_divide_half = " & to_string(sclk_divide_half));
-          info("    n_bits = " & to_string(n_bits));
-          info("    n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
-          info("    n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
-          info("    n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
-          info("    n_clks_le_width = " & to_string(n_clks_le_width));
-          info("    n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
-          info("    n_trx_loops = " & to_string(n_trx_loops));
-          info("    scs_idle_state = " & to_string(scs_idle_state));
-          info("    sclk_idle_state = " & to_string(sclk_idle_state));
-          info("    transmit_on_sclk_leading_edge = " & to_string(transmit_on_sclk_leading_edge));
-
-          i_keep_streaming              <= '1';
-          WaitForClock(i_clk, 5);
-
-          counter_checks.inc_n_trx(n_trx_loops);
-
-          i_start <= '1';
-          WaitForClock(i_clk, 1);
-          i_start <= '0';
-
-          for k in 1 to n_trx_loops - 2 loop
-
-            wait until rising_edge(o_sampled_d_to_peripheral);
-            WaitForClock(i_clk, 1);
-
-            if (k = n_trx_loops - 2) then
-              i_keep_streaming <= '0';
-            end if;
-
-          end loop;
-
-          wait until o_ready = '1';
-
-          WaitForClock(i_clk, 2 * 50 + 10); -- because `upper = 50` in run.py
-
-          counter_checks.print_values;
-
-          exit when counter_coverage = 1;
-
-          ICover(coverage_id, (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8));
-        end loop;
-
-        counter_checks.print_values;
-        counter_checks.streaming_mode_all_equal_to(counter_coverage);
-
       end if;
 
     end loop;
@@ -516,9 +366,7 @@ begin
 
       wait for 0 fs;
 
-      if (streaming_mode = '0') then
         check_equal(o_ready, ready_reference, "o_ready is not equal to ready_reference.", level => level);
-      end if;
 
       exit when last_check;
 
@@ -563,9 +411,7 @@ begin
       exit when rising_edge(o_ready);
       wait for 0 fs;
 
-      if (streaming_mode = '0') then
         check_equal(o_sclk, sclk_reference, "o_sclk is not equal to sclk_reference.", level => level);
-      end if;
 
     end loop;
 
@@ -602,9 +448,7 @@ begin
       wait on o_ready, o_scs, scs_reference;
       wait for 0 fs;
 
-      if (streaming_mode = '0') then
         check_equal(o_scs, scs_reference, "o_scs is not equal to scs_reference.", level => level);
-      end if;
 
     end loop;
 
@@ -641,9 +485,7 @@ begin
       wait on o_ready, o_le, le_reference;
       wait for 0 fs;
 
-      if (streaming_mode = '0') then
         check_equal(o_le, le_reference, "o_le is not equal to le_reference.", level => level);
-      end if;
 
     end loop;
 
