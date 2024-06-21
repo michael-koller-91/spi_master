@@ -13,21 +13,30 @@ library spi_lib;
 
 entity spi_master is
   generic (
-    g_config : t_config := c_default_config
+    g_config : t_config := c_default_config -- (see the comments in `spi_package`)
   );
   port (
     i_clk : in    std_ulogic := '0'; -- system clock
+    --
     -- control
+    --
     i_start           : in    std_ulogic := '0';
     o_busy            : out   std_ulogic := '0';
     o_ready           : out   std_ulogic := '0';
     i_keep_streaming  : in    std_ulogic := '0';
-    -- data
-    i_d_to_peripheral               : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-    o_d_from_peripheral             : out   std_ulogic_vector(g_config.max_n_bits - 1 downto 0) := (others => '0');
-    o_d_from_peripheral_read_strobe : out   std_ulogic                                          := '0'; -- use this to sample o_d_from_peripheral
-    o_d_to_peripheral_read_strobe   : out   std_ulogic                                          := '0';
-    -- settings
+    --
+    -- data that will be sent to the peripheral
+    --
+    i_d_to_peripheral         : in    std_ulogic_vector(g_config.max_n_bits - 1 downto 0)         := (others => '0'); -- this data will be sent to the peripheral
+    -- in streaming mode, `o_sampled_d_to_peripheral` goes high for one clock cycle when `i_d_to_peripheral` has been read
+    o_sampled_d_to_peripheral : out   std_ulogic                                                  := '0';
+    --
+    -- data that was received from the peripheral
+    --
+    o_d_from_peripheral : out   t_d_from_peripheral(data(g_config.max_n_bits - 1 downto 0)) := ((others => '0'), '0');
+    --
+    -- settings (see the comments in `spi_package`)
+    --
     i_settings : in    t_settings(
       sclk_divide_half_minus_1 (ceil_log2(g_config.max_sclk_divide_half) - 1 downto 0),
       n_bits_minus_1 (ceil_log2(g_config.max_n_bits) - 1 downto 0),
@@ -37,7 +46,9 @@ entity spi_master is
       n_clks_le_width_minus_1 (ceil_log2(g_config.max_n_clks_le_width) - 1 downto 0),
       n_clks_rx_sample_strobes_delay (ceil_log2(g_config.max_n_clks_rx_sample_strobes_delay + 1) - 1 downto 0)
       );
+    --
     -- SPI signals
+    --
     o_le                 : out   std_ulogic := '0';
     o_scs                : out   std_ulogic := '1';
     o_sclk               : out   std_ulogic := '1';
@@ -68,15 +79,18 @@ architecture arch of spi_master is
   signal scs_state : t_scs_fsm_state := inactive;
   signal scs_done  : std_ulogic      := '0';
 
-  signal sample_sdo_sreg : std_ulogic_vector(g_config.max_sclk_divide_half - 1 downto 0)           := (others => '0');
-  signal sample_sdi_sreg : std_ulogic_vector(g_config.max_n_clks_rx_sample_strobes_delay downto 0) := (others => '0');
-  signal sample_sdi      : std_ulogic                                                              := '0';
-  signal sample_sdi_reg  : std_ulogic                                                              := '0';
-  signal sample_sdi_read : std_ulogic                                                              := '0';
-  signal sample_sdi_done : std_ulogic                                                              := '0';
-  signal sample_sdo      : std_ulogic                                                              := '0';
-  signal sample_sdo_reg  : std_ulogic                                                              := '0';
-  signal sample_sdo_read : std_ulogic                                                              := '0';
+  signal sample_sdo_sreg        : std_ulogic_vector(g_config.max_sclk_divide_half - 1 downto 0)           := (others => '0');
+  signal sample_sdi_sreg        : std_ulogic_vector(g_config.max_n_clks_rx_sample_strobes_delay downto 0) := (others => '0');
+  signal sample_sdi             : std_ulogic                                                              := '0';
+  signal sample_sdi_reg         : std_ulogic                                                              := '0';
+  signal sample_sdi_read        : std_ulogic                                                              := '0';
+  signal sample_sdi_done        : std_ulogic                                                              := '0';
+  signal sample_sdi_done_detect : std_ulogic                                                              := '0';
+  signal sample_sdo             : std_ulogic                                                              := '0';
+  signal sample_sdo_reg         : std_ulogic                                                              := '0';
+  signal sample_sdo_read        : std_ulogic                                                              := '0';
+
+  signal sample_sdi_state : t_sample_sdi_state := idle;
 
   signal state : t_state := idle;
 
@@ -88,6 +102,8 @@ architecture arch of spi_master is
   signal ready : std_ulogic := '0';
 
   signal keep_streaming : std_ulogic := '0';
+  signal keep_streaming_old : std_ulogic := '0';
+  signal last_trx : std_ulogic := '0';
 
   -- sampled control
   signal start               : std_ulogic := '0';
@@ -152,6 +168,15 @@ begin
       if (start or sample_sdo_read) then
         keep_streaming <= i_keep_streaming;
       end if;
+
+      if start = '1' then
+        last_trx <= not i_keep_streaming;
+      else
+        if keep_streaming = '0' and sample_sdo = '1' then
+          last_trx <= '1';
+        end if;
+      end if;
+
     end if;
 
   end process p_keep_streaming;
@@ -164,17 +189,16 @@ begin
   begin
 
     if rising_edge(i_clk) then
-      o_d_from_peripheral_read_strobe <= sample_sdi_read;
+      o_d_from_peripheral.valid <= sample_sdi_read;
 
       if (sample_sdi_read) then
-        o_d_from_peripheral <= d_from_peripheral;
+        o_d_from_peripheral.data <= d_from_peripheral;
       end if;
     end if;
 
   end process p_peripheral_read;
 
-  o_d_to_peripheral_read_strobe <= sample_sdo_read;
-  -- o_d_to_peripheral_read_strobe <= sample_sdo_read and keep_streaming;
+  o_sampled_d_to_peripheral <= sample_sdo_read and keep_streaming;
 
   o_busy  <= busy;
   o_ready <= ready;
@@ -194,7 +218,7 @@ begin
   o_sd_to_peripheral <= sdo_reg;
 
   ---------------------------------------------------------------------------
-  -- The control FSM.
+  -- Generate the ready signal.
   ---------------------------------------------------------------------------
 
   p_fsm : process (i_clk) is
@@ -206,7 +230,7 @@ begin
 
         when wait_scs_and_le_and_sample_sdi =>
 
-          if (sclk_done = '1' and scs_done = '1' and le_done = '1' and sample_sdi_done = '1') then
+          if (sclk_done = '1' and scs_done = '1' and le_done = '1' and (sample_sdi_done_detect = '1' or sample_sdi_done = '1')) then
             ready <= '1';
             state <= idle;
           end if;
@@ -252,16 +276,33 @@ begin
   sample_sdi_read <= sample_sdi_reg when counter_n_sample_sdi = 0 else
                      '0';
 
-  p_sample_sdi_done : process (all) is
+  p_sample_sdi_done : process (i_clk) is
   begin
 
-    if (counter_n_sample_sdi = 0 and sample_sdi_reg = '1') then
-      sample_sdi_done <= '1';
-    elsif (start) then
-      sample_sdi_done <= '0';
+    if rising_edge(i_clk) then
+      case sample_sdi_state is
+
+        when sampling => 
+          if sample_sdi_done_detect = '1' then
+            sample_sdi_done <= '1';
+            sample_sdi_state <= idle;
+          end if;
+
+        when others => 
+          sample_sdi_done <= '1';
+
+          if (start) then
+            sample_sdi_done <= '0';
+            sample_sdi_state <= sampling;
+          end if;
+
+      end case;
     end if;
 
   end process p_sample_sdi_done;
+
+  sample_sdi_done_detect <= '1' when keep_streaming = '0' and counter_n_sample_sdi = 0 and sample_sdi_reg = '1' else
+                            '0';
 
   ---------------------------------------------------------------------------
   -- Generate LE.

@@ -27,12 +27,14 @@ entity tb_spi_master is
     g_max_sclk_divide_half               : positive   := 8;
     g_max_n_clks_sclk_to_le              : positive   := 2;
     g_max_n_clks_le_width                : positive   := 3;
-    g_max_n_clks_rx_sample_strobes_delay : natural    := 1;
-    g_watchdog_timeout                   : time       := 50 us
+    g_max_n_clks_rx_sample_strobes_delay : positive    := 1
+    -- g_watchdog_timeout                   : time       := 50 us
   );
 end entity tb_spi_master;
 
 architecture arch of tb_spi_master is
+  constant g_watchdog_timeout : time := 50 ms;
+  constant c_max_n_trx_loops : positive := 31;
 
   constant c_clk_period : time     := 10 ns;
   constant c_config     : t_config :=
@@ -76,19 +78,15 @@ architecture arch of tb_spi_master is
 
   signal i_clk : std_ulogic := '0';
 
-  signal o_d_from_peripheral             : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
+  signal o_d_from_peripheral             : t_d_from_peripheral(data(c_config.max_n_bits - 1 downto 0)) := ((others => '0'), '0');
   signal d_from_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal n_trx_loops                     : integer                                             := 1;
   signal d_from_peripheral_expected_old  : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal o_d_from_peripheral_read_strobe : std_ulogic                                          := '0';
-  signal o_d_to_peripheral_read_strobe   : std_ulogic                                          := '0';
+  signal o_sampled_d_to_peripheral   : std_ulogic                                          := '0';
   signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
-  signal i_d_to_peripheral_expected      : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
-  signal check_o_d_from_peripheral        : std_ulogic := '0';
-  signal n_checks_d_from_peripheral       : integer    := 0;
-  signal n_checks_d_from_peripheral_total : integer    := 0;
-  signal n_checks_d_to_peripheral_total   : integer    := 0;
+  signal check_data_to_peripheral_done    : std_ulogic := '0';
+  signal generate_sd_from_peripheral_done : std_ulogic := '0';
 
   signal i_start              : std_ulogic := '0';
   signal i_sd_from_peripheral : std_ulogic := '0';
@@ -164,10 +162,9 @@ begin
       o_ready           => o_ready,
       i_keep_streaming  => i_keep_streaming,
       --
-      i_d_to_peripheral               => i_d_to_peripheral,
-      o_d_from_peripheral             => o_d_from_peripheral,
-      o_d_from_peripheral_read_strobe => o_d_from_peripheral_read_strobe,
-      o_d_to_peripheral_read_strobe   => o_d_to_peripheral_read_strobe,
+      i_d_to_peripheral         => i_d_to_peripheral,
+      o_sampled_d_to_peripheral => o_sampled_d_to_peripheral,
+      o_d_from_peripheral       => o_d_from_peripheral,
       --
       i_settings => i_settings,
       --
@@ -182,9 +179,9 @@ begin
 
   main : process is
 
-    variable counter_coverage                         : integer := 0;
-    variable tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 : integer;
-    constant n_bins                                   : integer := 3;
+    variable counter_coverage                               : integer := 0;
+    variable tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8 : integer;
+    constant n_bins                                         : integer := 3;
 
   begin
 
@@ -304,16 +301,37 @@ begin
 
         counter_checks.print_values;
         counter_checks.all_equal_to(counter_coverage);
-      elsif run("10_streaming") then
-        transmit_on_sclk_leading_edge <= '1';
-        sclk_divide_half              <= 2;
-        streaming_mode                <= '1';
-        i_keep_streaming              <= '1';
+      elsif run("10_streaming_mode_simple_case_for_debugging") then
+        streaming_mode   <= '1';
+        i_keep_streaming <= '1';
+        wait for 0 ns;
 
-        n_trx_loops <= 5;
+        sclk_divide_half               <= c_config.max_sclk_divide_half;
+        n_bits                         <= c_config.max_n_bits;
+        n_clks_scs_to_sclk             <= c_config.max_n_clks_scs_to_sclk;
+        n_clks_sclk_to_scs             <= c_config.max_n_clks_sclk_to_scs;
+        n_clks_sclk_to_le              <= c_config.max_n_clks_sclk_to_le;
+        n_clks_le_width                <= c_config.max_n_clks_le_width;
+        n_clks_rx_sample_strobes_delay <= c_config.max_n_clks_rx_sample_strobes_delay;
+        n_trx_loops                    <= 6;
+        scs_idle_state                 <= g_scs_idle_state;
+        sclk_idle_state                <= g_sclk_idle_state;
+        transmit_on_sclk_leading_edge  <= g_transmit_on_sclk_leading_edge;
 
         WaitForClock(i_clk, 1);
-        info("n_trx_loops = " & to_string(n_trx_loops));
+
+        info("settings:");
+        info("  sclk_divide_half = " & to_string(sclk_divide_half));
+        info("  n_bits = " & to_string(n_bits));
+        info("  n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
+        info("  n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+        info("  n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+        info("  n_clks_le_width = " & to_string(n_clks_le_width));
+        info("  n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
+        info("  n_trx_loops = " & to_string(n_trx_loops));
+        info("  scs_idle_state = " & to_string(scs_idle_state));
+        info("  sclk_idle_state = " & to_string(sclk_idle_state));
+        info("  transmit_on_sclk_leading_edge = " & to_string(transmit_on_sclk_leading_edge));
 
         i_start <= '1';
         WaitForClock(i_clk, 1);
@@ -321,8 +339,7 @@ begin
 
         for k in 1 to n_trx_loops - 2 loop
 
-          wait until rising_edge(o_d_to_peripheral_read_strobe);
-          i_d_to_peripheral_expected <= i_d_to_peripheral;
+          wait until rising_edge(o_sampled_d_to_peripheral);
           WaitForClock(i_clk, 1);
 
           if (k = n_trx_loops - 2) then
@@ -331,11 +348,104 @@ begin
 
         end loop;
 
-        wait until rising_edge(o_d_to_peripheral_read_strobe);
-        i_d_to_peripheral_expected <= i_d_to_peripheral;
+        wait until rising_edge(o_sampled_d_to_peripheral);
         WaitForClock(i_clk, 1);
 
         WaitForClock(i_clk, 30);
+      elsif run("11_streaming_mode_random_coverage") then
+        streaming_mode <= '1';
+        wait for 0 ns;
+
+        counter_checks.reset;
+
+        coverage_id <= NewID("coverage_id");
+        wait for 0 fs;
+
+        AddCross(
+                 coverage_id,
+                 GenBin(1, c_config.max_sclk_divide_half, n_bins),
+                 GenBin(1, c_config.max_n_bits, n_bins),
+                 GenBin(1, c_config.max_n_clks_scs_to_sclk, n_bins),
+                 GenBin(1, c_config.max_n_clks_sclk_to_scs, n_bins),
+                 GenBin(1, c_config.max_n_clks_sclk_to_le, n_bins),
+                 GenBin(1, c_config.max_n_clks_le_width, n_bins),
+                 GenBin(0, c_config.max_n_clks_rx_sample_strobes_delay, n_bins),
+                 GenBin(3, c_max_n_trx_loops, n_bins)
+               );
+
+        counter_coverage := 0;
+
+        while not IsCovered(coverage_id) loop
+
+          counter_coverage := counter_coverage + 1;
+
+          (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8) := GetRandPoint(coverage_id);
+
+          sclk_divide_half               <= 1;--tmp1;
+          n_bits                         <= tmp2;
+          n_clks_scs_to_sclk             <= tmp3;
+          n_clks_sclk_to_scs             <= tmp4;
+          n_clks_sclk_to_le              <= tmp5;
+          n_clks_le_width                <= tmp6;
+          n_clks_rx_sample_strobes_delay <= tmp7;
+          n_trx_loops                    <= tmp8;
+          scs_idle_state                 <= rv.RandSlv(1)(1);
+          sclk_idle_state                <= rv.RandSlv(1)(1);
+          transmit_on_sclk_leading_edge  <= '1';--rv.RandSlv(1)(1);
+
+          if counter_coverage = 2 then
+            sclk_divide_half <= 1;
+          end if;
+
+          WaitForClock(i_clk, 1);
+
+          info("counter_coverage = " & to_string(counter_coverage));
+          info("    sclk_divide_half = " & to_string(sclk_divide_half));
+          info("    n_bits = " & to_string(n_bits));
+          info("    n_clks_scs_to_sclk = " & to_string(n_clks_scs_to_sclk));
+          info("    n_clks_sclk_to_scs = " & to_string(n_clks_sclk_to_scs));
+          info("    n_clks_sclk_to_le = " & to_string(n_clks_sclk_to_le));
+          info("    n_clks_le_width = " & to_string(n_clks_le_width));
+          info("    n_clks_rx_sample_strobes_delay = " & to_string(n_clks_rx_sample_strobes_delay));
+          info("    n_trx_loops = " & to_string(n_trx_loops));
+          info("    scs_idle_state = " & to_string(scs_idle_state));
+          info("    sclk_idle_state = " & to_string(sclk_idle_state));
+          info("    transmit_on_sclk_leading_edge = " & to_string(transmit_on_sclk_leading_edge));
+
+          i_keep_streaming              <= '1';
+          WaitForClock(i_clk, 5);
+
+          counter_checks.inc_n_trx(n_trx_loops);
+
+          i_start <= '1';
+          WaitForClock(i_clk, 1);
+          i_start <= '0';
+
+          for k in 1 to n_trx_loops - 2 loop
+
+            wait until rising_edge(o_sampled_d_to_peripheral);
+            WaitForClock(i_clk, 1);
+
+            if (k = n_trx_loops - 2) then
+              i_keep_streaming <= '0';
+            end if;
+
+          end loop;
+
+          wait until o_ready = '1';
+
+          WaitForClock(i_clk, 2 * 50 + 10); -- because `upper = 50` in run.py
+
+          counter_checks.print_values;
+
+          exit when counter_coverage = 1;
+
+          ICover(coverage_id, (tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8));
+        end loop;
+
+        counter_checks.print_values;
+        counter_checks.streaming_mode_all_equal_to(counter_coverage);
+
       end if;
 
     end loop;
@@ -548,14 +658,18 @@ begin
   p_check_data_to_peripheral : process is
   begin
 
+    check_data_to_peripheral_done <= '1';
+
     wait until rising_edge(i_start);
+
+    check_data_to_peripheral_done <= '0';
 
     i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
     wait for 0 ps;
 
     for k in 1 to n_trx_loops loop
 
-      info("  DUT -> TB: i_d_to_peripheral = " & to_string(i_d_to_peripheral));
+      info("  DUT -> TB (k = " & to_string(k) & "): i_d_to_peripheral = " & to_string(i_d_to_peripheral));
 
       for n in i_d_to_peripheral'left downto i_d_to_peripheral'left - n_bits + 1 loop
 
@@ -569,8 +683,6 @@ begin
 
       end loop;
 
-      n_checks_d_to_peripheral_total <= n_checks_d_to_peripheral_total + 1;
-
       i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
       wait for 0 fs;
 
@@ -583,7 +695,11 @@ begin
   p_generate_sd_from_peripheral : process is
   begin
 
+    generate_sd_from_peripheral_done <= '1';
+
     wait until rising_edge(i_start);
+
+    generate_sd_from_peripheral_done <= '0';
 
     d_from_peripheral_expected                      <= (others => '0');
     d_from_peripheral_expected(n_bits - 1 downto 0) <= rv.RandSlv(n_bits);
@@ -597,7 +713,7 @@ begin
 
     for k in 1 to n_trx_loops loop
 
-      info("  TB -> DUT: d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
+      info("  TB -> DUT (k = " & to_string(k) & "): d_from_peripheral_expected " & to_string(d_from_peripheral_expected));
 
       for n in n_bits - 1 downto 0 loop
 
@@ -625,58 +741,18 @@ begin
 
   d_from_peripheral_expected_old <= transport d_from_peripheral_expected after 4 * c_clk_period;
 
-  -- This is how a module receiving from `spi_master` is supposed to use the two out ports.
+  -- This is how a module receiving from `spi_master` is supposed to use the out port `o_d_from_peripheral`.
   p_check_data_from_peripheral : process (i_clk) is
   begin
 
     if rising_edge(i_clk) then
-      check_o_d_from_peripheral <= '0';
-
-      if (o_d_from_peripheral_read_strobe) then
-        check_equal(o_d_from_peripheral, d_from_peripheral_expected_old, result("for o_d_from_peripheral"), level => level);
-        check_o_d_from_peripheral <= '1';
+      if (o_d_from_peripheral.valid) then
+        check_equal(o_d_from_peripheral.data, d_from_peripheral_expected_old, result("for o_d_from_peripheral"), level => level);
         counter_checks.inc_sd_from_peripheral;
       end if;
     end if;
 
   end process p_check_data_from_peripheral;
-
-  ---------------------------------------------------------------------------
-  -- Check if enough checks have been made.
-  ---------------------------------------------------------------------------
-
-  -- The output read indicator can come at the same time as ready,
-  -- so we need to delay ready to read the correct value in the testbench.
-  ready_delayed1 <= transport o_ready after c_clk_period;
-  ready_delayed2 <= transport o_ready after 2 * c_clk_period;
-
-  p_count_checks : process is
-  begin
-
-    wait until i_start = '1';
-    n_checks_d_from_peripheral <= 0;
-
-    while not ready_delayed1 loop
-
-      wait on check_o_d_from_peripheral, o_ready;
-
-      if (check_o_d_from_peripheral) then
-        n_checks_d_from_peripheral       <= n_checks_d_from_peripheral + 1;
-        n_checks_d_from_peripheral_total <= n_checks_d_from_peripheral_total + 1;
-        wait for 0 ps;
-      end if;
-
-    end loop;
-
-  end process p_count_checks;
-
-  p_check_n_checks : process is
-  begin
-
-    wait until ready_delayed2 = '1';
-    check_equal(n_checks_d_from_peripheral, n_trx_loops, level => level);
-
-  end process p_check_n_checks;
 
 end architecture arch;
 
