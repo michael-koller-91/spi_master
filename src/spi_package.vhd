@@ -48,7 +48,7 @@ package spi_package is
     max_sclk_divide_half               => 1,
     max_n_clks_sclk_to_le              => 1,
     max_n_clks_le_width                => 1,
-    max_n_clks_rx_sample_strobes_delay => 0
+    max_n_clks_rx_sample_strobes_delay => 1
   );
 
   type t_settings is record
@@ -104,7 +104,14 @@ package spi_package is
 
   type t_scs_fsm_state is (inactive, active);
 
+  type t_sample_sdi_state is (idle, sampling);
+
   type t_le_fsm_state is (idle, wait_until_sclk_done, wait_until_active, active);
+
+  type t_d_from_peripheral is record
+    data  : std_ulogic_vector;
+    valid : std_ulogic; -- use this as a strobe to sample `data`
+  end record t_d_from_peripheral;
 
   -- How many bits are needed to represent `value` values?
 

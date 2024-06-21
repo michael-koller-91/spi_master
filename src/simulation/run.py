@@ -170,6 +170,20 @@ test.add_config(
     },
 )
 
+seed = 3659108
+test = tb.test("10_streaming_mode_simple_case_for_debugging")
+test.add_config(
+    name=f"seed={seed}",
+    generics={"g_rng_seed": seed},
+)
+
+test = tb.test("11_streaming_mode_random_coverage")
+test.add_config(
+    name=f"seed={seed}",
+    generics={"g_rng_seed": seed},
+)
+
+
 if args.warn:
     for test in tb.get_tests():
         test.set_generic("g_warning", True)
