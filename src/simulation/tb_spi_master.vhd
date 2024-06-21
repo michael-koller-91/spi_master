@@ -82,9 +82,6 @@ architecture arch of tb_spi_master is
   signal d_from_peripheral_expected_old  : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
   signal i_d_to_peripheral               : std_ulogic_vector(c_config.max_n_bits - 1 downto 0) := (others => '0');
 
-  signal check_data_to_peripheral_done    : std_ulogic := '0';
-  signal generate_sd_from_peripheral_done : std_ulogic := '0';
-
   signal i_start              : std_ulogic := '0';
   signal i_sd_from_peripheral : std_ulogic := '0';
   signal o_sd_to_peripheral   : std_ulogic := '0';
@@ -170,9 +167,9 @@ begin
 
   main : process is
 
-    variable counter_coverage                               : integer := 0;
-    variable tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8 : integer;
-    constant n_bins                                         : integer := 3;
+    variable counter_coverage                         : integer := 0;
+    variable tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 : integer;
+    constant n_bins                                   : integer := 3;
 
   begin
 
@@ -533,11 +530,7 @@ begin
   p_check_data_to_peripheral : process is
   begin
 
-    check_data_to_peripheral_done <= '1';
-
     wait until rising_edge(i_start);
-
-    check_data_to_peripheral_done <= '0';
 
     i_d_to_peripheral <= rv.RandSlv(i_d_to_peripheral'length);
     wait for 0 ps;
@@ -566,11 +559,7 @@ begin
   p_generate_sd_from_peripheral : process is
   begin
 
-    generate_sd_from_peripheral_done <= '1';
-
     wait until rising_edge(i_start);
-
-    generate_sd_from_peripheral_done <= '0';
 
     d_from_peripheral_expected                      <= (others => '0');
     d_from_peripheral_expected(n_bits - 1 downto 0) <= rv.RandSlv(n_bits);

@@ -29,10 +29,6 @@ package tb_package is
 
     procedure inc_sd_from_peripheral;
 
-    procedure inc_n_trx (
-      n_trx_loops : positive
-    );
-
     procedure all_equal_to (
       n_checks_expected : positive
     );
@@ -52,7 +48,6 @@ package body tb_package is
     variable n_sclk               : natural;
     variable n_sd_to_peripheral   : natural;
     variable n_sd_from_peripheral : natural;
-    variable n_trx                : natural;
 
     procedure print_values is
     begin
@@ -64,7 +59,6 @@ package body tb_package is
       info("n_sclk               = " & to_string(n_sclk));
       info("n_sd_to_peripheral   = " & to_string(n_sd_to_peripheral));
       info("n_sd_from_peripheral = " & to_string(n_sd_from_peripheral));
-      info("n_trx                = " & to_string(n_trx));
 
     end procedure;
 
@@ -78,7 +72,6 @@ package body tb_package is
       n_sclk               := 0;
       n_sd_to_peripheral   := 0;
       n_sd_from_peripheral := 0;
-      n_trx                := 0;
 
     end procedure;
 
@@ -128,15 +121,6 @@ package body tb_package is
     begin
 
       n_sd_from_peripheral := n_sd_from_peripheral + 1;
-
-    end procedure;
-
-    procedure inc_n_trx (
-      n_trx_loops : positive
-    ) is
-    begin
-
-      n_trx := n_trx + n_trx_loops;
 
     end procedure;
 
